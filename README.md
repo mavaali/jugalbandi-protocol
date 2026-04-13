@@ -30,9 +30,10 @@ Across 5 ambiguous engineering tasks (Claude Sonnet 4):
 
 | Metric | Single-Pass | Council (3x) | Jugalbandi |
 |--------|------------|--------------|------------|
-| Assumptions surfaced (avg) | 10.2 | 14.6 | 25.2 |
+| Assumptions surfaced (avg) | 9.4 | 14.2 | 25.4 |
 | Critiques/challenges (avg) | 4.8 | 12.8 | 7.2 |
-| Escalations (total) | 0 | 0 | 3 |
+
+The assumption surfacing gap (2.7x single-pass, 1.8x council) is the result that survived ablation testing. See the blog post for the full story — including an escalation claim that didn't survive and what replaced it.
 
 ## Usage
 
