@@ -110,7 +110,7 @@ async function main() {
     console.log(`  → Written to ${outPath}`);
 
     console.log(`\n  Summary:`);
-    console.log(`    Baseline:    ${baseline.assumptions_surfaced} assumptions, ${baseline.self_critiques} critiques`);
+    console.log(`    Baseline:    ${baseline.assumptions_surfaced} assumptions, ${baseline.self_critiques} critiques, ${baseline.escalations} escalations`);
     console.log(`    Council:     ${council.unique_assumptions_estimate} assumptions (est. unique), ${council.total_critiques} critiques (3 passes)`);
     console.log(`    Jugalbandi:  ${jugalbandi.proposer_assumptions} assumptions, ${jugalbandi.challenger_challenges} challenges`);
     console.log(`    Dispositions: ${JSON.stringify(jugalbandi.resolver_dispositions)}`);

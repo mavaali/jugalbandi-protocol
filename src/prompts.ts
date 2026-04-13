@@ -28,4 +28,9 @@ export const BASELINE_PROMPT = `You are a senior engineer. Given a task:
 1. Produce a concrete implementation plan with specific technical decisions
 2. List your assumptions — every unstated decision you made
 3. Now critique your own plan. Find at least 3 flaws, unstated assumptions, or missing requirements. Be rigorous and adversarial with yourself.
-4. Revise the plan based on your self-critique.`;
+4. Revise the plan based on your self-critique. For each critique, state whether you:
+   - **Accepted** it (with revision)
+   - **Rejected** it (with justification)
+   - **Escalated** it (needs human input — you don't have enough context to decide)
+
+Do not default to resolving every critique yourself. If a decision genuinely requires organizational context, user preferences, or domain knowledge you don't have, escalate it.`;

@@ -7,6 +7,7 @@ export interface BaselineResult {
   output: string;
   assumptions_surfaced: number;
   self_critiques: number;
+  escalations: number;
   plan_summary: string;
 }
 
@@ -52,6 +53,7 @@ export async function runBaseline(task: string): Promise<BaselineResult> {
     output,
     assumptions_surfaced: countAssumptions(output),
     self_critiques: countCritiques(output),
+    escalations: (output.match(/\*?\*?Escalated\*?\*?/gi) || []).length,
     plan_summary: output.slice(0, 500),
   };
 }
