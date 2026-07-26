@@ -19,6 +19,24 @@ Or run it straight from a clone, without installing:
 claude --plugin-dir ./plugins/jugalbandi
 ```
 
+### Cloud sessions
+
+Claude Code on the web runs in a fresh container per session, so a user-scope install
+doesn't survive. Put the install in your **environment's setup script** — it runs before
+every session:
+
+```bash
+claude plugin marketplace add mavaali/jugalbandi-protocol
+claude plugin install jugalbandi@jugalbandi-protocol
+```
+
+The repo also ships a `.claude/settings.json` declaring the marketplace and enabling the
+plugin. That's what makes the plugin offer itself in interactive CLI and desktop sessions
+once you trust the folder — but it is only the declarative half. A plugin enabled solely
+by project settings, from an external source like a GitHub repo, doesn't load until it is
+actually installed, and a headless cloud session has nobody to prompt. The setup script is
+what closes that gap.
+
 ## Use
 
 ```
