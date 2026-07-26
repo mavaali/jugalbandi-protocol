@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "jugalbandi-protocol",
+  "description": "Dialectical agent protocols for Claude Code",
+  "owner": {
+    "name": "Mihir Wagle",
+    "url": "https://github.com/mavaali"
+  },
+  "plugins": [
+    {
+      "name": "jugalbandi",
+      "source": "./plugins/jugalbandi",
+      "description": "Dialectical planning for Claude Code. Runs a task through Proposer, Challenger, and Resolver subagents in isolated contexts to surface assumptions before you write code.",
+      "version": "0.1.0",
+      "category": "workflow",
+      "tags": ["planning", "adversarial-review", "assumptions", "subagents"]
+    }
+  ]
+}

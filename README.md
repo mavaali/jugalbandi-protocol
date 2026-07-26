@@ -46,6 +46,20 @@ npx tsx src/runner.ts           # run all 5 tasks
 
 Results are written to `results/task-N-slug.json`.
 
+## Claude Code Plugin
+
+The protocol also ships as a Claude Code plugin, so you can run it against a real codebase instead of a benchmark task:
+
+```bash
+/plugin marketplace add mavaali/jugalbandi-protocol
+/plugin install jugalbandi@jugalbandi-protocol
+
+/jugalbandi:plan Add multi-region failover to the payments service
+/jugalbandi:challenge docs/rfc-042.md
+```
+
+Each role is a separate subagent, so the context isolation is enforced by the harness rather than by prompt discipline. Escalations come back as questions you actually get asked. See [`plugins/jugalbandi/`](plugins/jugalbandi/README.md).
+
 ## Blog Post
 
 [Jugalbandi Protocol: What Happens When You Force AI Agents to Argue](https://www.waglesworld.com/blog/jugalbandi-protocol-what-happens-when-you-force-ai-agents-to-argue)
