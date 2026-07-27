@@ -78,10 +78,17 @@ self-critique, which is the baseline this is measured against.
    - After a second round, the novelty line from step 7.4.
    - The artifact paths, so the user can read the raw proposal and challenges.
 
-7. **Escalations are the deliverable.** If the final Resolver escalated anything, put
-   those open questions to the user with `AskUserQuestion` — they are precisely the
-   decisions the protocol found that a human, not an agent, has to make. Once answered,
-   fold the answers into the plan and update the final plan file.
+7. **Escalations are the deliverable.** Collect the open questions from **every** round,
+   not just the last one, and put them to the user with `AskUserQuestion`. They are
+   precisely the decisions the protocol found that a human, not an agent, has to make.
+   Once answered, fold the answers into the plan and update the final plan file.
+
+   After a second round this means the union of `RUN/final-plan.md` and
+   `RUN/round-2/final-plan.md` — deduplicated where both raise the same question. A
+   round-1 escalation does not travel into round 2: the round-2 Challenger sees only the
+   revised plan, so an open question round 2 happens not to rediscover would otherwise
+   vanish. Losing an escalation is the one failure this protocol cannot tolerate, and
+   the extra round must not cause it.
 
 ## The second round
 

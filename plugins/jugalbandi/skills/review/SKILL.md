@@ -2,7 +2,7 @@
 name: review
 description: Adversarially review finished work rather than a plan. Runs the project's own checks first, then hands a cold reviewer the diff — no commit messages, no intent, no conversation — and reports tagged findings. When a Jugalbandi plan exists for the work, also checks the diff for drift against the decisions that plan already made. Use before opening a pull request or after implementing a plan.
 argument-hint: "[git ref, path, or blank for the working diff]"
-allowed-tools: Bash(git diff *), Bash(git status *), Bash(mkdir -p *)
+allowed-tools: Bash(git diff *), Bash(git status *), Bash(git rev-parse *), Bash(git symbolic-ref *), Bash(mkdir -p *)
 ---
 
 # Jugalbandi: review finished work
@@ -15,9 +15,17 @@ reviewer judges what the code does, not what anyone says it does.
 ## Steps
 
 1. **Resolve the diff.** If the argument is a git ref or ref range, diff that. If it is
-   a path, diff that path. If it is empty, use the working diff against the default
-   branch. Write the raw diff to `${CLAUDE_PROJECT_DIR}/.jugalbandi/review-<slug>/diff.md`
-   (create the directory first). Call that directory `REV`.
+   a path, diff that path. If it is empty, diff against the repository's default branch.
+
+   Resolve that branch, don't assume it. `git symbolic-ref refs/remotes/origin/HEAD`
+   gives it; fall back to whichever of `main` or `master` exists. Hardcoding `main`
+   silently produces an empty or nonsensical diff on any repo that uses something else.
+
+   Pick a short kebab-case slug: the ref range with slashes and dots replaced by
+   hyphens, or the branch name for a working diff. If
+   `${CLAUDE_PROJECT_DIR}/.jugalbandi/review-<slug>/` already exists, append `-2`, `-3`,
+   and so on rather than overwriting a previous review. Write the raw diff to
+   `review-<slug>/diff.md` (create the directory first). Call that directory `REV`.
 
    If the diff is empty, say so and stop.
 
@@ -32,12 +40,18 @@ reviewer judges what the code does, not what anyone says it does.
    If the project has no checks to run, say so in one line and continue.
 
 3. **Assemble the decision list, if there is one.** Look for a Jugalbandi run covering
-   this work: `${CLAUDE_PROJECT_DIR}/.jugalbandi/*/final-plan.md`. If one plausibly
-   matches, copy its `## Dispositions` and `## Open Questions for the Human` sections —
-   verbatim — into `REV/decisions.md`.
+   this work: `${CLAUDE_PROJECT_DIR}/.jugalbandi/*/final-plan.md`. Copy its
+   `## Dispositions` and `## Open Questions for the Human` sections — verbatim — into
+   `REV/decisions.md`.
 
-   If there is no matching plan, skip this. The review still runs; it just cannot
-   produce `[DRIFT]` findings.
+   Only attach a plan you can justify attaching: its revised plan must name files the
+   diff actually touches. A plan that merely sounds related is worse than no plan —
+   every `[DRIFT]` finding it produces will be confidently wrong, measured against
+   decisions that were never about this change. If more than one run could match, or
+   none clearly does, say which you found and ask the user rather than guessing.
+
+   With no decision list the review still runs; it just cannot produce `[DRIFT]`
+   findings. Say so in one line so the absence isn't mistaken for a clean drift result.
 
 4. **Launch the `jugalbandi:reviewer` subagent.** Its prompt is exactly:
 

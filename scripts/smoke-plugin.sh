@@ -56,11 +56,15 @@ if [ $run_status -ne 0 ]; then
   exit 1
 fi
 
-RUN_DIR="$(dirname "$(find "$WORK/.jugalbandi" -maxdepth 2 -name proposal.md -not -path '*/round-2/*' | head -1)")"
-if [ -z "$RUN_DIR" ] || [ ! -d "$RUN_DIR" ]; then
+# Resolve the proposal first and guard on it. `dirname ""` prints `.`, which is a real
+# directory, so wrapping the find in dirname before testing lets a missing run silently
+# pass the guard and fail later as a pile of confusing assertion errors.
+PROPOSAL="$(find "$WORK/.jugalbandi" -maxdepth 2 -name proposal.md -not -path '*/round-2/*' 2>/dev/null | head -1)"
+if [ -z "$PROPOSAL" ]; then
   echo "✗ no run directory under $WORK/.jugalbandi; see $WORK/run.log"
   exit 1
 fi
+RUN_DIR="$(dirname "$PROPOSAL")"
 echo "Artifacts: $RUN_DIR"
 
 echo
