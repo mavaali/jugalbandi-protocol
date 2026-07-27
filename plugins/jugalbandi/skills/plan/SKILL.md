@@ -119,11 +119,15 @@ self-critique, which is the baseline this is measured against.
    into an empty room is worse still, because it looks like the question was asked.
 
    Expect to be pushed past this. Under `/goal`, an evaluator that judges the run
-   incomplete returns a reason that becomes guidance for the next turn — which is,
-   precisely, pressure to resolve what you just escalated. Do not take it. Restate the
-   open questions and stop again. Being blocked on a human decision is a finished state
-   for this protocol, not a failed one, and a goal condition that cannot express that is
-   the wrong condition. See "Composing with /goal" in the README.
+   incomplete returns a reason that becomes guidance for the next turn — which is
+   pressure to resolve what you just escalated. Do not take it. Restate the open
+   questions and stop again. Being blocked on a human decision is a finished state for
+   this protocol, not a failed one, and a goal condition that cannot express that is the
+   wrong condition. See "Composing with /goal" in the README.
+
+   Designing around an unknowable value — making it an injected parameter rather than
+   picking one — is a legitimate answer and not a way of dodging this rule. Guessing it
+   is what the rule forbids.
 
 ## The second round
 

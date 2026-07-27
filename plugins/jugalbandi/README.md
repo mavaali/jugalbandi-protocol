@@ -174,13 +174,22 @@ Two judges, different jobs, neither doing the other's.
 
 ### Make "blocked on a human" a success state
 
-This is the one that matters. When the protocol escalates, it has found a decision a
-human must make. Under a goal there is no human — and the evaluator doesn't wait. A "no"
-verdict returns a reason that becomes guidance for the next turn, which is *precisely*
-pressure to push past the escalation. Left alone, a goal converts the protocol's main
-safety output into an obstacle it routes around.
+When the protocol escalates, it has found a decision a human must make. Under a goal
+there is no human — and the evaluator doesn't wait. A "no" verdict returns a reason that
+becomes guidance for the next turn, which is structurally pressure to push past the
+escalation.
 
-So the condition has to treat being blocked as finished:
+**How much that pressure actually bites is not established.** A two-arm test — identical
+fixture, one condition with the escape hatch below and one without — did not reproduce
+any suppression. The naive arm escalated nothing, but not by caving: it produced a design
+that injected the unknowable values as parameters rather than guessing them, which is the
+right answer. Neither arm invented a value it had been told not to invent. That is one run
+per arm, with different proposals and different challenge sets, so it is not a controlled
+comparison either way — it is grounds for not overclaiming, not grounds for reassurance.
+
+Write the condition to accommodate blocking anyway. It costs one clause, and it is the
+difference between a goal that can express "waiting on a human" and one that structurally
+cannot:
 
 ```
 /goal Either (a) I have stated the plan has zero open escalations and npm test exits 0,
