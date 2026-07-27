@@ -58,7 +58,7 @@ The protocol also ships as a Claude Code plugin, so you can run it against a rea
 /jugalbandi:challenge docs/rfc-042.md
 ```
 
-Each role is a separate subagent, so the context isolation is enforced by the harness rather than by prompt discipline. Escalations come back as questions you actually get asked. See [`plugins/jugalbandi/`](plugins/jugalbandi/README.md).
+Each role is a separate subagent, so half the isolation is structural: the harness guarantees a subagent starts with no context beyond the prompt it is handed, and no amount of sloppy prompting can leak the Proposer's reasoning into the Challenger's head. The other half — not pasting the task text into that prompt in the first place — is still discipline, enforced by rules in the skill rather than by the runtime. Escalations come back as questions you actually get asked. See [`plugins/jugalbandi/`](plugins/jugalbandi/README.md).
 
 ## Blog Post
 

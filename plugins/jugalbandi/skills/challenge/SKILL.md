@@ -1,7 +1,7 @@
 ---
 name: challenge
 description: Run only the Jugalbandi Challenger against a plan that already exists — a design doc, an RFC, a proposal file, or a plan sitting in this conversation. Returns at least three tagged adversarial challenges and never an approval. Use when you want the attack without re-planning from scratch.
-argument-hint: [path to plan file, or blank to use the plan in this conversation]
+argument-hint: "[path to plan file, or blank to use the plan in this conversation]"
 allowed-tools: Bash(mkdir -p *)
 ---
 
