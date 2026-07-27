@@ -36,21 +36,25 @@ self-critique, which is the baseline this is measured against.
 ## Steps
 
 1. **Set up the run directory.** Pick a short kebab-case slug for the task. If
-   `${CLAUDE_PROJECT_DIR}/.jugalbandi/<slug>/` already exists, append `-2`, `-3`, and so
+   `.jugalbandi/<slug>/` already exists, append `-2`, `-3`, and so
    on — a second run of a similar task must not overwrite the first one's artifacts,
    which are the audit trail. Then:
 
    ```
-   mkdir -p "${CLAUDE_PROJECT_DIR}/.jugalbandi/<slug>"
+   mkdir -p ".jugalbandi/<slug>"
    ```
+
+   The path is relative to the project root, deliberately — do not interpolate
+   `$CLAUDE_PROJECT_DIR`, which is unset in headless `-p` runs and expands to an
+   absolute path at the filesystem root.
 
    These paths are a contract, not a suggestion. `/jugalbandi:review` finds the decision
    list for its `[DRIFT]` checks by globbing `.jugalbandi/*/final-plan.md` and
-   `.jugalbandi/*/round-2/final-plan.md`. A run that writes `plan_final.md` in the
-   project root instead is invisible to it, and drift detection then reports nothing
-   wrong rather than reporting that it couldn't look. If `${CLAUDE_PROJECT_DIR}` is
-   unset, use the current working directory — but keep the `.jugalbandi/<slug>/` shape
-   and the three filenames exactly.
+   `.jugalbandi/*/round-2/final-plan.md`. A run that writes `plan_final.md` or
+   `resolution.md` in the project root instead is invisible to it, and drift detection
+   then reports nothing wrong rather than reporting that it couldn't look. Keep the
+   `.jugalbandi/<slug>/` shape and the three filenames — `proposal.md`,
+   `challenges.md`, `final-plan.md` — exactly.
 
    Call that directory `RUN` below. If `.jugalbandi/` is not in the project's
    `.gitignore`, mention that at the end — don't edit `.gitignore` yourself.

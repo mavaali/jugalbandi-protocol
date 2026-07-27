@@ -18,7 +18,7 @@ Run one round of adversarial review against a plan that already exists.
    - If the argument is a file path, that file is the proposal. Use it directly.
    - If the argument is empty, the target is the most recent plan, design, or proposal
      in this conversation. Copy it **verbatim** into
-     `${CLAUDE_PROJECT_DIR}/.jugalbandi/adhoc/proposal.md` (create the directory first).
+     `.jugalbandi/adhoc/proposal.md` (create the directory first).
      Copy, do not summarize — a summarized proposal produces summarized challenges.
      Then say in one line which plan you took as the target.
 

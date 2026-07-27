@@ -23,9 +23,11 @@ reviewer judges what the code does, not what anyone says it does.
 
    Pick a short kebab-case slug: the ref range with slashes and dots replaced by
    hyphens, or the branch name for a working diff. If
-   `${CLAUDE_PROJECT_DIR}/.jugalbandi/review-<slug>/` already exists, append `-2`, `-3`,
+   `.jugalbandi/review-<slug>/` already exists, append `-2`, `-3`,
    and so on rather than overwriting a previous review. Write the raw diff to
-   `review-<slug>/diff.md` (create the directory first). Call that directory `REV`.
+   `.jugalbandi/review-<slug>/diff.md` (create the directory first). Call that directory
+   `REV`. Paths here are relative to the project root — do not interpolate
+   `$CLAUDE_PROJECT_DIR`, which is unset in headless runs.
 
    If the diff is empty, say so and stop.
 
@@ -55,8 +57,8 @@ reviewer judges what the code does, not what anyone says it does.
    If the project has no checks to run, say so in one line and continue.
 
 3. **Assemble the decision list, if there is one.** Look for a Jugalbandi run covering
-   this work. Check **both** `${CLAUDE_PROJECT_DIR}/.jugalbandi/*/final-plan.md` and
-   `${CLAUDE_PROJECT_DIR}/.jugalbandi/*/round-2/final-plan.md`.
+   this work. Check **both** `.jugalbandi/*/final-plan.md` and
+   `.jugalbandi/*/round-2/final-plan.md`.
 
    When a run has a `round-2/final-plan.md`, that is the authoritative one — the round-1
    plan it sits beside has been superseded. Measuring drift against the round-1 plan
