@@ -44,6 +44,7 @@ what closes that gap.
 /jugalbandi:plan Migrate the billing schema --rounds 2
 /jugalbandi:challenge docs/rfc-042.md
 /jugalbandi:challenge          # attacks the plan already in the conversation
+/jugalbandi:review             # attacks the working diff, before you open a PR
 ```
 
 Claude will also reach for `/jugalbandi:plan` on its own when a task is ambiguous or
@@ -96,6 +97,44 @@ rediscovery rate is a finding about the Resolver — an independent Challenger, 
 knowledge that the point was ever raised, raised it again.
 
 Cost is the catch: five subagent runs instead of three.
+
+## Reviewing results, not plans
+
+`/jugalbandi:review` points the same cold read at a finished diff.
+
+It is **not** the three-role protocol aimed at code, and the difference is worth being
+precise about. On results there is no Proposer, and the Proposer is where the measured
+win comes from — 25.4 assumptions is a property of a role *instructed to declare every
+unstated decision while making it*, not of adversarial structure in general. You cannot
+recover that after the fact; asking an implementer to retro-fit an assumptions list to a
+finished diff gets you post-hoc rationalization from the party least motivated to report
+honestly.
+
+So the review skill keeps what does transfer and drops what doesn't:
+
+- **Checks run first.** Tests, type check, lint. If they fail, the skill reports and
+  stops. Plans have no ground truth, which is why an adversary is the only instrument
+  available; a diff has plenty, and tooling is cheaper and more reliable for the
+  checkable part. Spending a subagent to rediscover a type error is waste.
+- **The reviewer reads cold** — the diff and nothing else. No commit messages, no branch
+  name, no PR description. Those are the author's claim about intent, and the point is
+  to judge what the code does instead.
+- **A fourth tag, `[DRIFT]`.** If a `final-plan.md` exists for the work, its dispositions
+  and open questions are handed over as the specification. `[DRIFT]` means the code
+  contradicts a decision already made — or answers a question the plan explicitly
+  escalated to a human. That last case is the sharpest finding the plugin can produce:
+  a question flagged as needing human judgment, quietly answered in code.
+- **No Resolver.** On a plan a bad disposition muddies a document; on a diff it would
+  edit code and break something that works. That needs a test oracle strong enough to
+  catch a bad acceptance, and "the tests passed before the edit" isn't it.
+
+Drift only works as the back half of a run that started with `/jugalbandi:plan` — it
+needs the decision list that run produced. Plan, build, then check whether the build
+honored the plan.
+
+These are design arguments, not measured results. The numbers below cover planning only;
+a results variant would need its own baseline against "just ask for a code review" and
+"run the tests" before it earns a row in that table.
 
 ## Why not just ask for a critique
 
