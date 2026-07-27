@@ -94,7 +94,9 @@ reviewer judges what the code does, not what anyone says it does.
    any `[DRIFT]` findings and say plainly which decision each one contradicts — those
    are the ones where the code went somewhere nobody agreed to.
 
-   Give the path to `REV/findings.md`.
+   Put the findings themselves in your reply, not just the path to them. Anything
+   judging this run from outside — a human, a `/goal` evaluator, a Stop hook — reads the
+   conversation, not the filesystem. Give the path to `REV/findings.md` as well.
 
 ## No Resolver
 

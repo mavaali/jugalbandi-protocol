@@ -81,6 +81,12 @@ self-critique, which is the baseline this is measured against.
    - After a second round, the novelty line from step 7.4.
    - The artifact paths, so the user can read the raw proposal and challenges.
 
+   **Put all of this in your reply, not only in the files.** A path is not a report.
+   Anything judging this run from outside — a human skimming, a `/goal` evaluator, a
+   Stop hook — sees the conversation, not the filesystem. An outcome that exists only in
+   `final-plan.md` is invisible to every one of them, and a run whose escalations were
+   never spoken aloud reads exactly like a run that had none.
+
 7. **Escalations are the deliverable.** Collect the open questions from **every** round,
    not just the last one, and put them to the user with `AskUserQuestion`. They are
    precisely the decisions the protocol found that a human, not an agent, has to make.
@@ -94,12 +100,18 @@ self-critique, which is the baseline this is measured against.
    the extra round must not cause it.
 
    **If nobody is there to ask** — a headless `-p` run, a scheduled task, an autonomous
-   loop — do not call `AskUserQuestion`, and do not answer the questions yourself.
-   Write them to `RUN/OPEN-QUESTIONS.md`, state in your final output that the plan has
-   unresolved escalations and where they are, and stop. An escalation answered by the
-   agent that raised it is not an escalation; it is the unsanctioned decision this
-   protocol exists to surface. A prompt into an empty room is worse still, because it
-   looks like the question was asked.
+   loop, an active `/goal` — do not call `AskUserQuestion`, and do not answer the
+   questions yourself. Write them to `RUN/OPEN-QUESTIONS.md`, **list them verbatim in
+   your reply**, and stop. An escalation answered by the agent that raised it is not an
+   escalation; it is the unsanctioned decision this protocol exists to surface. A prompt
+   into an empty room is worse still, because it looks like the question was asked.
+
+   Expect to be pushed past this. Under `/goal`, an evaluator that judges the run
+   incomplete returns a reason that becomes guidance for the next turn — which is,
+   precisely, pressure to resolve what you just escalated. Do not take it. Restate the
+   open questions and stop again. Being blocked on a human decision is a finished state
+   for this protocol, not a failed one, and a goal condition that cannot express that is
+   the wrong condition. See "Composing with /goal" in the README.
 
 ## The second round
 
