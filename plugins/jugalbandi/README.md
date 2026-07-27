@@ -148,6 +148,83 @@ These are design arguments, not measured results. The numbers below cover planni
 a results variant would need its own baseline against "just ask for a code review" and
 "run the tests" before it earns a row in that table.
 
+## Composing with `/goal`
+
+[`/goal`](https://code.claude.com/docs/en/goal) sets a completion condition and keeps
+Claude working across turns, with a separate small model judging after each turn whether
+the condition holds. It rests on the same idea this plugin does — *the one doing the work
+doesn't get to call the finish line* — applied to termination instead of content. They
+compose well. One conflict will bite if you don't design for it.
+
+### Never make a Jugalbandi review the finish line
+
+The Challenger and Reviewer have no approval verb. A condition like "until
+`/jugalbandi:review` is satisfied" never terminates, for the same reason the second round
+is capped at two rather than run to convergence.
+
+Anchor the condition on **dispositions** instead — something Claude can finish:
+
+```
+/goal Every [STRUCTURAL] and [DRIFT] finding from the /jugalbandi:review I ran has been
+fixed or explicitly declined with a stated reason, and npm test exits 0. Stop after 15 turns.
+```
+
+The reviewer supplies findings; the goal evaluator judges whether they were dealt with.
+Two judges, different jobs, neither doing the other's.
+
+### Make "blocked on a human" a success state
+
+When the protocol escalates, it has found a decision a human must make. Under a goal
+there is no human — and the evaluator doesn't wait. A "no" verdict returns a reason that
+becomes guidance for the next turn, which is structurally pressure to push past the
+escalation.
+
+**How much that pressure actually bites is not established.** A two-arm test — identical
+fixture, one condition with the escape hatch below and one without — did not reproduce
+any suppression. The naive arm escalated nothing, but not by caving: it produced a design
+that injected the unknowable values as parameters rather than guessing them, which is the
+right answer. Neither arm invented a value it had been told not to invent. That is one run
+per arm, with different proposals and different challenge sets, so it is not a controlled
+comparison either way — it is grounds for not overclaiming, not grounds for reassurance.
+
+Write the condition to accommodate blocking anyway. It costs one clause, and it is the
+difference between a goal that can express "waiting on a human" and one that structurally
+cannot:
+
+```
+/goal Either (a) I have stated the plan has zero open escalations and npm test exits 0,
+or (b) I have listed the open escalations verbatim in my reply and stopped — (b) counts
+as complete, not as failure. Stop after 15 turns.
+```
+
+Phrase it as *what Claude said*, never as *what is on disk*. The evaluator doesn't call
+tools; it only reads the conversation. `OPEN-QUESTIONS.md exists` is unjudgeable, while
+"I have listed the open escalations verbatim" is right there in the transcript. This is
+also why both skills are required to report findings and escalations inline rather than
+pointing at artifact paths.
+
+### Two practical constraints
+
+**Cost.** One `/jugalbandi:plan` is three to five subagent runs. A goal re-runs turns
+until its condition holds, so a condition implying the protocol re-runs each turn gets
+expensive fast. Treat a review as a one-time gate — "run it once, then address the
+findings" — never as the loop body.
+
+**Permissions.** A goal doesn't grant any. `/jugalbandi:review` runs *your* project's
+check commands, which can't be pre-declared in a skill's `allowed-tools`, so unattended
+goal turns need [auto mode](https://code.claude.com/docs/en/auto-mode-config) alongside.
+
+### The shape worth using
+
+```
+/jugalbandi:plan <task>     # escalations answered here, where a human is present
+                            # …then a goal anchored on those decisions
+/jugalbandi:review          # exit gate: does the build honor what was agreed?
+```
+
+Plan with a human in the loop, build without one, verify against what was decided. The
+escalations get answered at the one point where somebody is actually there to answer them.
+
 ## Why not just ask for a critique
 
 Across 5 ambiguous engineering tasks (Claude Sonnet 4), measured in the harness in the
