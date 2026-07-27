@@ -1,0 +1,36 @@
+name: plugin
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validate manifests and cross-references
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # `claude plugin validate` reads local files only — no authentication needed,
+      # so it runs on every pull request. It is the authority on manifest and
+      # frontmatter shape; it catches things a hand-rolled parser accepts, such as
+      # an `argument-hint` that isn't valid YAML.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Validate plugin manifest
+        run: claude plugin validate ./plugins/jugalbandi --strict
+
+      - name: Validate marketplace manifest
+        run: claude plugin validate . --strict
+
+      # Covers what validate can't: version drift between the two manifests, and
+      # skills referencing agents that aren't shipped.
+      - name: Check plugin cross-references
+        run: node scripts/check-plugin.mjs
