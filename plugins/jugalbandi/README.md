@@ -132,6 +132,18 @@ Drift only works as the back half of a run that started with `/jugalbandi:plan` 
 needs the decision list that run produced. Plan, build, then check whether the build
 honored the plan.
 
+One operational wrinkle worth knowing. A skill's `allowed-tools` grant has to name
+commands up front, and this skill's check step runs whatever *your* project uses — which
+can't be known in advance. Interactively that's fine: you get asked and approve. Headless
+it isn't, because an unanswered prompt is a denial, so the checks silently don't run:
+
+```bash
+claude -p "/jugalbandi:review main...HEAD" --allowedTools "Bash"
+```
+
+The skill is required to say plainly when it couldn't run the checks rather than
+hand-simulate them and report a result as if they ran.
+
 These are design arguments, not measured results. The numbers below cover planning only;
 a results variant would need its own baseline against "just ask for a code review" and
 "run the tests" before it earns a row in that table.
