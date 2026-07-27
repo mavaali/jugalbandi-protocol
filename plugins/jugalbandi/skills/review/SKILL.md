@@ -33,9 +33,24 @@ reviewer judges what the code does, not what anyone says it does.
    tests, type check, lint. Look at `package.json` scripts, a Makefile, or the CI
    workflow to find the real commands rather than guessing.
 
-   **If they fail, report the failures and stop.** Adversarially reviewing code that
-   does not pass its own tests is wasted compute — the tooling already found something
-   cheaper and more reliably than a subagent will. Fix that first.
+   **If a real check fails, report the failures and stop.** Adversarially reviewing code
+   that does not pass its own tests is wasted compute — the tooling already found
+   something cheaper and more reliably than a subagent will. Fix that first.
+
+   A placeholder is not a real check. `npm init` writes
+   `"test": "echo \"Error: no test specified\" && exit 1"` by default, and a great many
+   repositories never replace it. A script that only prints a message and exits without
+   executing anything means *no tests configured* — treat it as an absent check, not a
+   failure, and continue. Halting there would make this skill refuse to run on a large
+   share of real projects.
+
+   Distinguish the two by what the command does, not by its exit code: a check that
+   compiled, linted, or executed tests and then reported a problem is a stop; a stub
+   that never ran anything is not.
+
+   If you cannot run the checks at all — no permission, missing toolchain — say so
+   explicitly and continue. Do not hand-simulate them and report the result as if they
+   ran; an unexecuted check reported as passing is worse than an absent one.
 
    If the project has no checks to run, say so in one line and continue.
 
