@@ -44,6 +44,14 @@ self-critique, which is the baseline this is measured against.
    mkdir -p "${CLAUDE_PROJECT_DIR}/.jugalbandi/<slug>"
    ```
 
+   These paths are a contract, not a suggestion. `/jugalbandi:review` finds the decision
+   list for its `[DRIFT]` checks by globbing `.jugalbandi/*/final-plan.md` and
+   `.jugalbandi/*/round-2/final-plan.md`. A run that writes `plan_final.md` in the
+   project root instead is invisible to it, and drift detection then reports nothing
+   wrong rather than reporting that it couldn't look. If `${CLAUDE_PROJECT_DIR}` is
+   unset, use the current working directory — but keep the `.jugalbandi/<slug>/` shape
+   and the three filenames exactly.
+
    Call that directory `RUN` below. If `.jugalbandi/` is not in the project's
    `.gitignore`, mention that at the end — don't edit `.gitignore` yourself.
 
@@ -154,6 +162,12 @@ Run these after step 4:
    so plainly when it happens — it means those rejections deserve a second look.
 
 ## After the run
+
+Before you report, confirm the artifacts are where they belong: `RUN/proposal.md`,
+`RUN/challenges.md`, `RUN/final-plan.md`, plus the `round-2/` trio after a second round.
+If any of them ended up elsewhere or under a different name, move them into place. This
+takes a moment and keeps the run legible to `/jugalbandi:review` and to whoever reads it
+next.
 
 Stop at the plan. Do not start implementing unless the user asks. If they do, work from
 the final plan — the revised plan, not the original proposal.
