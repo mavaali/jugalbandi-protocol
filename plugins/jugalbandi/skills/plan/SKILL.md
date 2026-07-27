@@ -35,7 +35,10 @@ self-critique, which is the baseline this is measured against.
 
 ## Steps
 
-1. **Set up the run directory.** Pick a short kebab-case slug for the task. Then:
+1. **Set up the run directory.** Pick a short kebab-case slug for the task. If
+   `${CLAUDE_PROJECT_DIR}/.jugalbandi/<slug>/` already exists, append `-2`, `-3`, and so
+   on — a second run of a similar task must not overwrite the first one's artifacts,
+   which are the audit trail. Then:
 
    ```
    mkdir -p "${CLAUDE_PROJECT_DIR}/.jugalbandi/<slug>"
@@ -89,6 +92,14 @@ self-critique, which is the baseline this is measured against.
    revised plan, so an open question round 2 happens not to rediscover would otherwise
    vanish. Losing an escalation is the one failure this protocol cannot tolerate, and
    the extra round must not cause it.
+
+   **If nobody is there to ask** — a headless `-p` run, a scheduled task, an autonomous
+   loop — do not call `AskUserQuestion`, and do not answer the questions yourself.
+   Write them to `RUN/OPEN-QUESTIONS.md`, state in your final output that the plan has
+   unresolved escalations and where they are, and stop. An escalation answered by the
+   agent that raised it is not an escalation; it is the unsanctioned decision this
+   protocol exists to surface. A prompt into an empty room is worse still, because it
+   looks like the question was asked.
 
 ## The second round
 

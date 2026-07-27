@@ -55,9 +55,16 @@ reviewer judges what the code does, not what anyone says it does.
    If the project has no checks to run, say so in one line and continue.
 
 3. **Assemble the decision list, if there is one.** Look for a Jugalbandi run covering
-   this work: `${CLAUDE_PROJECT_DIR}/.jugalbandi/*/final-plan.md`. Copy its
-   `## Dispositions` and `## Open Questions for the Human` sections — verbatim — into
-   `REV/decisions.md`.
+   this work. Check **both** `${CLAUDE_PROJECT_DIR}/.jugalbandi/*/final-plan.md` and
+   `${CLAUDE_PROJECT_DIR}/.jugalbandi/*/round-2/final-plan.md`.
+
+   When a run has a `round-2/final-plan.md`, that is the authoritative one — the round-1
+   plan it sits beside has been superseded. Measuring drift against the round-1 plan
+   would flag the round-2 revisions themselves as drift, which is exactly backwards.
+
+   Copy the chosen file's `## Dispositions` and `## Open Questions for the Human`
+   sections — verbatim — into `REV/decisions.md`. Escalations from round 1 that round 2
+   did not repeat still count as open questions; include them too.
 
    Only attach a plan you can justify attaching: its revised plan must name files the
    diff actually touches. A plan that merely sounds related is worse than no plan —

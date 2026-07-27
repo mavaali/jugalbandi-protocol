@@ -13,7 +13,14 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN_DIR="$REPO_ROOT/plugins/jugalbandi"
-WORK="${1:-$(mktemp -d)}"
+
+# A caller-supplied workdir is theirs to keep. One we created ourselves is cleaned up on
+# success and kept on failure, since the artifacts are the only way to debug a failure.
+if [ $# -ge 1 ]; then
+  WORK="$1"; OWNED=0
+else
+  WORK="$(mktemp -d)"; OWNED=1
+fi
 
 failures=0
 check() {
@@ -79,9 +86,17 @@ check "≥3 tagged challenges" \
 check "final plan written"          test -s "$RUN_DIR/final-plan.md"
 check "final plan has a revised plan" \
   grep -qiE '^##+ *Revised Plan' "$RUN_DIR/final-plan.md"
-check "every challenge dispositioned" \
-  count_at_least "$RUN_DIR/final-plan.md" '\*\*(Accepted|Rejected|Escalated)\*\*' \
-  "$(grep -oE '\[(STRUCTURAL|ASSUMPTION|MISSING)\]' "$RUN_DIR/challenges.md" | wc -l | tr -d ' ')"
+# One disposition entry per challenge, exactly. Counting `**Accepted**` markers alone
+# can't catch a dropped challenge: the Resolver can emit extra markers in prose and
+# still cover only four of five challenges. Count the `###` entries inside the
+# Dispositions section instead, which the protocol requires to map one-to-one.
+disposition_entries() {
+  awk '/^## +Dispositions/{s=1;next} /^## /{s=0} s && /^### /{n++} END{print n+0}' "$1"
+}
+n_challenges=$(grep -cE '^### +\[(STRUCTURAL|ASSUMPTION|MISSING)\]' "$RUN_DIR/challenges.md")
+n_dispositions=$(disposition_entries "$RUN_DIR/final-plan.md")
+check "every challenge dispositioned ($n_dispositions entries for $n_challenges challenges)" \
+  test "$n_dispositions" -eq "$n_challenges"
 
 echo
 echo "Round 2"
@@ -109,3 +124,8 @@ if [ "$failures" -gt 0 ]; then
   exit 1
 fi
 echo "✓ all assertions passed"
+if [ "$OWNED" -eq 1 ]; then
+  rm -rf "$WORK"
+else
+  echo "  artifacts at $RUN_DIR"
+fi
