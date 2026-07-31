@@ -9,7 +9,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
     "dotenv": "^17.4.2"
