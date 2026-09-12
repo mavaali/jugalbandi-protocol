@@ -1,0 +1,3 @@
+H1: The assumption surfacing gap between Jugalbandi and single-pass will hold across tiers but will be smaller in the low-ambiguity tier, where there is less envelope to fill.
+H2: Jugalbandi will produce fewer escalations than a permission-matched single-pass baseline, but prompt sensitivity cannot be ruled out as a partial explanation. The structural account and the prompt sensitivity account are not fully separable with this design.
+H3: The assumption surfacing gap will persist across instruction-following models with comparable context window handling. The claim is not expected to be Claude-specific, but is scoped to models capable of maintaining role-level context isolation across sequential calls.
