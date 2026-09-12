@@ -127,20 +127,36 @@ This collapses the permission requirement to read-only on every provider:
 - Codex runs `--sandbox read-only`, capturing the artifact via
   [DATA] `-o/--output-last-message <FILE>`.
 - Antigravity runs headless, capturing the artifact from stdout.
-  [DATA] In headless mode the response goes to stdout and diagnostics — errors, auth prompts,
-  progress, permission notices — go to stderr, and a tool requiring approval it cannot obtain
-  is soft-denied rather than blocking. Both properties suit this design directly: clean
-  capture without parsing, and no hang when a role attempts a write it no longer needs.
+  [VENDOR-DOC — not measured, the CLI is not installed here] In headless mode the response
+  goes to stdout and diagnostics — errors, auth prompts, progress, permission notices — go to
+  stderr, and a tool requiring approval it cannot obtain is soft-denied rather than blocking.
+  Both properties would suit this design directly: clean capture without parsing, and no hang
+  when a role attempts a write it no longer needs. Everywhere else in this document [DATA]
+  means measured in session; these claims are the vendor's, and its probes will settle them.
 
 Nothing is lost. The Proposer still reads the codebase, and the Challenger still exercises
 challenger.md's permission to "read the codebase to check whether the proposal's claims about
 it are true." Only the write is gone, and the write was never the role's purpose.
 
+**One cost this does introduce.** The artifact must now fit in a single model turn, where a
+tool-call-driven file write was not so bounded. The Resolver's artifact is the long one — a
+disposition per challenge plus a self-contained revised plan — and it is the most likely to
+be truncated. Structural validation catches a truncated artifact only if the missing part is
+a required section; a plan that ends mid-sentence after `## Revised Plan` passes. Implementers
+should treat output-length limits as a known risk for the Resolver specifically, and the
+mixed-assignment test should use a task whose resolution is long enough to exercise it.
+
 ### Accepted divergence: version-control archaeology
 
-The native roles declare `tools: Read, Grep, Glob, Write` — no Bash. [DATA] The probe above
-ran under `--sandbox read-only` and Codex executed commands anyway, so read-only removes
-writes, not command execution. Tightening the sandbox further does not close this.
+The native roles declare `tools: Read, Grep, Glob, Write` — no Bash.
+
+**[DATA] Measured in this session, separately from the preloading probe.** In the same scratch
+repo, `codex exec --sandbox read-only` was asked to run `git log --oneline -1` and report its
+exact output, with an instruction to reply `CANNOT-EXECUTE` if it could not. It returned
+`f148ef5 seed commit for probe`. The sandbox visibly denied its *writes* in the same run —
+`git: error: couldn't create cache file '/tmp/xcrun_db-...' (errno=Operation not permitted)` —
+while permitting execution. Read-only removes writes, not command execution, and tightening
+the sandbox further does not close this.
 
 The delta over the native path is narrower than "can read the repo" — Read, Grep, and Glob
 already allow that. It is specifically **version-control archaeology**: an external role can
@@ -199,9 +215,23 @@ this spec exists to prevent.
 }
 ```
 
-A value is `<provider>` or `<provider>:<model>`, split on the first colon. Providers are
-`claude`, `codex`, `antigravity`. Omitting the model half means that CLI picks its own
-default.
+A value is `<provider>` or `<provider>:<model>`, split on the first colon. Omitting the model
+half means that CLI picks its own default.
+
+Providers, and their status in the shipped build:
+
+| Provider | Status |
+|---|---|
+| `claude` | Enabled. The native subagent, as today. |
+| `codex` | Enabled once its Probe A and Probe B pass. |
+| `antigravity` | **Recognized but not enabled.** Hard error until its probes pass. |
+
+`antigravity` is a recognized value with a distinct error — *"provider 'antigravity' is
+configured but not yet enabled; its isolation probes have not been run"* — never the generic
+unknown-provider error, which would contradict the documented schema. Its dispatch path must
+be **unreachable in the shipped build, not merely untested**. A recognized provider that
+silently dispatches to an unprobed CLI is precisely the failure "Sequencing" exists to
+prevent, and the gap between "documented" and "wired up" is where that failure would live.
 
 A missing file, a missing `models` key, or a missing role key all resolve to `claude`. A
 project that never creates this file behaves exactly as the plugin does today.
@@ -215,7 +245,7 @@ that does not exist.
 `/jugalbandi:plan` accepts `--proposer=`, `--challenger=`, and `--resolver=` flags:
 
 ```
-/jugalbandi:plan Add multi-region failover --challenger=codex --resolver=antigravity
+/jugalbandi:plan Add multi-region failover --challenger=codex --resolver=codex:gpt-5.1-codex
 ```
 
 Parsed and stripped from the task text the same way `--rounds 2` already is, before the
@@ -257,8 +287,31 @@ Behavior:
 7. Enforce `--timeout` (default 10 minutes). On expiry, kill the child and exit non-zero.
 8. Capture the artifact — Codex via `--output-last-message`, Antigravity from stdout — and
    write it to `--output`. An empty or missing final message is a failure.
-9. Verify the written file is non-empty. **Do not trust the exit code.**
-10. Record the resolved CLI version for the caller to store alongside the role assignment.
+9. **Validate the artifact structurally, per role.** Non-empty is not a sufficient bar. Under
+   the old design the role called `Write` and the artifact either had the content or the file
+   did not exist; now the adapter writes whatever the model happened to say last. A final
+   message reading "I've analyzed the proposal and identified 5 challenges above" is
+   non-empty, and it would land in `challenges.md` and degrade every downstream consumer
+   silently: the conductor builds its tally by counting tags in the artifact, and
+   `/jugalbandi:review` copies `## Dispositions` and `## Open Questions for the Human`
+   verbatim out of `final-plan.md` for its `[DRIFT]` checks. A prose-summarized artifact
+   yields a tally of zero and a drift check against nothing, both reported as clean results.
+
+   So each role declares the structure its artifact must have, and a violation is a failure
+   handled identically to an empty message:
+
+   | Role | Required structure |
+   |---|---|
+   | proposer | An `## Assumptions` section with at least one `-` bullet |
+   | challenger | At least three `### [TAG] ` headings, each tag one of STRUCTURAL/ASSUMPTION/MISSING |
+   | resolver | `## Dispositions` and `## Revised Plan` sections; one disposition per challenge |
+   | reviewer | At least one tagged finding heading |
+
+   The spec's claim that "the content contract is unchanged" is only true if something
+   enforces it. This is that something.
+10. Record the resolved CLI version, and the neutralization flag set that was passed, for the
+    caller to store alongside the role assignment. A version alone answers which runs an
+    upgrade affected; the flag set answers whether they were actually neutralized.
 
 ### Conductor branch
 
@@ -266,11 +319,17 @@ The SKILL.md prose gains one decision per role: if the resolved model is `claude
 native subagent exactly as today. Otherwise run `run-role.mjs` via Bash with that role's
 existing input and output paths.
 
-Either way the conductor reads the resulting artifact file to build the reported tally. It
-does not parse a free-text summary from the CLI. The role `.md` files specify an output
-contract for their final message, and a Claude subagent is bound by that contract as its
-persona; an external model receives the same words as ordinary prompt text and may or may not
-comply.
+Either way the conductor reads the resulting artifact file to build the reported tally, never
+CLI chatter, progress output, or anything on stderr. For a native subagent the artifact is the
+file the role wrote; for an external role it is the file the adapter wrote from the role's
+final message.
+
+What makes the external path safe is not persona binding — an external model receives the
+role's output contract as ordinary prompt text and may or may not comply — but the structural
+validation in adapter step 9. The adapter has already rejected an artifact that does not carry
+the role's required sections before the conductor ever reads it, so by the time the conductor
+counts tags or copies `## Dispositions`, the shape it depends on has been checked rather than
+assumed.
 
 **Script path resolution.** [HYPOTHESIS] Claude Code exposes `${CLAUDE_PLUGIN_ROOT}` to
 plugin skills; this was not verified in this session and no installed plugin in the local
@@ -302,7 +361,7 @@ prompted — precisely the mode `plan/SKILL.md` step 7 goes out of its way to su
 4. `--rounds 2` reuses each role's round-1 model.
 5. The step 6 report gains one line, naming external roles explicitly so the weaker isolation
    guarantee is visible in the report and not only in a file:
-   `Models: proposer=claude, challenger=codex (external), resolver=antigravity (external) — RUN/models.json`
+   `Models: proposer=claude, challenger=codex (external), resolver=claude — RUN/models.json`
 
 ### Data flow — `/jugalbandi:challenge`, `/jugalbandi:review`
 
@@ -315,6 +374,8 @@ belongs to.
 | Condition | Behavior |
 |---|---|
 | Unknown provider, or `claude:<model>`, in config or flag | Stop before launching any role; report the offending value |
+| Recognized-but-not-enabled provider (`antigravity`) | Stop; report that its isolation probes have not been run — not the generic unknown-provider error |
+| Artifact fails its role's structural validation | Treated as model failure; stop and report which required section was absent |
 | CLI binary not on `PATH` | Stop; report the missing binary and which role wanted it |
 | Adapter exits non-zero | Stop; report the captured stderr tail |
 | Timeout expires | Kill the child; stop; report the timeout and the role |
