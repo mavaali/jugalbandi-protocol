@@ -13,7 +13,7 @@ the assumption-surfacing gap is not Claude-specific; nothing in the plugin can c
 test that claim, because there is no way to put a different model in a role.
 
 This spec adds per-role model assignment, including cross-provider assignment via the Codex
-and Gemini CLIs.
+and Antigravity CLIs.
 
 ## Goals
 
@@ -31,7 +31,8 @@ and Gemini CLIs.
   native subagent, as today."
 - Swapping a role's model between round 1 and round 2 of a `--rounds 2` run.
 - Changing `src/runner.ts` or the benchmark harness.
-- Managing provider authentication. Codex and Gemini CLI auth is a user prerequisite.
+- Managing provider authentication. External CLI auth is a user prerequisite.
+- Supporting the `gemini` CLI. See "Why not Gemini CLI" below.
 
 ## Explicit non-claim
 
@@ -72,52 +73,113 @@ This repo has no `AGENTS.md` today. That is not a defense: the plugin is designe
 installed into other repositories, and a repo with agent instruction files is the normal case
 for the audience this plugin has.
 
-**[DATA] Two further findings from the same probes.** `codex exec` printed *"Reading
-additional input from stdin..."* — inherited stdin is an additional uncontrolled input, not
-merely untidy. And `gemini 0.59.0` exited **code 0** having done nothing, printing *"Approval
-mode overridden to 'default' because the current folder is not trusted"* and an
-authentication error. Exit status is not a success signal for either CLI.
+**[DATA] `codex exec` also printed "Reading additional input from stdin..."** — inherited
+stdin is an additional uncontrolled input, not merely untidy.
 
-**[HYPOTHESIS] Gemini's ambient loading was not measured**, because the CLI is not
-authenticated on this machine. [TRAINING] It loads `GEMINI.md` hierarchically and, per its own
-help text, "If not provided, all extensions are used." Treat it as leaking until measured.
+**[HYPOTHESIS] Antigravity's ambient loading is unmeasured.** The CLI is not installed on this
+machine. It is a Gemini-family agent harness and should be assumed to load context files by
+default until a probe says otherwise.
 
 ### Requirement: ambient context neutralization
 
 The adapter MUST start each external role from a context containing nothing but the prompt it
 was given. Concretely, every invocation:
 
-- Disables project and user instruction files (`AGENTS.md`, `GEMINI.md`, and their
+- Disables project and user instruction files (`AGENTS.md` and equivalents, including their
   hierarchical parents).
 - Disables user config, profiles, extensions, MCP servers, and hooks.
   [DATA] Codex exposes `--ignore-user-config`, `--ignore-rules`, and `-c key=value`.
-  [DATA] Gemini exposes `-e/--extensions` and `--allowed-mcp-server-names`.
 - Starts a fresh, non-resumable, non-persisted session.
-  [DATA] Codex exposes `--ephemeral`; both CLIs have opt-in `resume`/`--session-file` which
-  must simply never be passed.
+  [DATA] Codex exposes `--ephemeral`; `resume`/`fork` are opt-in and must never be passed.
 - Passes the prompt as an argv element or over an explicitly-controlled stdin, never both,
   and never inherits the parent's stdin.
-- [DATA] For Gemini, passes `--skip-trust`, or `--approval-mode` is silently overridden.
 
 The exact flag set is an implementation detail; the requirement is the property. **The
-planner must treat the probe below as the acceptance criterion, not the flag list** — a flag
-set that does not pass the probe is wrong no matter how plausible it reads.
+planner must treat the probes below as the acceptance criterion, not the flag list** — a flag
+set that does not pass them is wrong no matter how plausible it reads.
 
-### Accepted divergence: shell access
+### External roles do not write
 
-The native roles declare `tools: Read, Grep, Glob, Write` — no Bash. [TRAINING] Codex
-performs file edits through a shell/apply-patch tool, so any sandbox permissive enough to let
-a role write its output file also permits arbitrary command execution in the workspace. A
-Codex Challenger could run `git log` or `git diff` and reconstruct the task it was not given.
+An earlier draft required a write-permissive sandbox so each role could write its own
+artifact. That forced a permission grant wide enough to reopen the channels the
+neutralization requirement closes. The discovery came from the Gemini CLI, which is no longer
+a supported provider but whose behavior produced the insight worth keeping:
 
-This is unavoidable given the vehicle: a role that can write a file in a repo can read that
-repo. The spec accepts it rather than pretending otherwise, with two consequences the
-implementation must honor:
+**[DATA]** In `@google/gemini-cli` `bundle/chunk-LZ4UWPZ4.js`, workspace trust gates
+workspace-scoped configuration loading — `const safeWorkspace = isTrusted ? workspace : {}`
+(16193), `this.workspace = isTrusted ? workspace : this.createEmptyWorkspace(workspace)`
+(16211), `loadEnvironment(settings, workspaceDir, isWorkspaceTrustedFn)` (16459). *Untrusted*
+is the state in which workspace settings are replaced with an empty object. The flag that
+grants write permission is therefore also the flag that turns workspace config loading back
+on. Two requirements that each looked correct cancelled each other out.
+
+The fix is to remove the need for the grant entirely:
+
+**An external role produces its artifact as its final message. The adapter writes the file.**
+
+The adapter substitutes the role's `## Output contract` section with an external-role variant
+instructing the model to return the full artifact content as its final message and write
+nothing. The *content* contract is unchanged — what belongs in `challenges.md` is identical
+either way; only delivery differs.
+
+This collapses the permission requirement to read-only on every provider:
+
+- Codex runs `--sandbox read-only`, capturing the artifact via
+  [DATA] `-o/--output-last-message <FILE>`.
+- Antigravity runs headless, capturing the artifact from stdout.
+  [DATA] In headless mode the response goes to stdout and diagnostics — errors, auth prompts,
+  progress, permission notices — go to stderr, and a tool requiring approval it cannot obtain
+  is soft-denied rather than blocking. Both properties suit this design directly: clean
+  capture without parsing, and no hang when a role attempts a write it no longer needs.
+
+Nothing is lost. The Proposer still reads the codebase, and the Challenger still exercises
+challenger.md's permission to "read the codebase to check whether the proposal's claims about
+it are true." Only the write is gone, and the write was never the role's purpose.
+
+### Accepted divergence: version-control archaeology
+
+The native roles declare `tools: Read, Grep, Glob, Write` — no Bash. [DATA] The probe above
+ran under `--sandbox read-only` and Codex executed commands anyway, so read-only removes
+writes, not command execution. Tightening the sandbox further does not close this.
+
+The delta over the native path is narrower than "can read the repo" — Read, Grep, and Glob
+already allow that. It is specifically **version-control archaeology**: an external role can
+run `git log`, `git diff`, or `git reflog` and reconstruct the task it was deliberately not
+given, in a way the native tool set cannot. That is the concession, stated precisely rather
+than softened.
+
+The alternative — running external roles against a directory stripped of the repo — was
+considered and rejected: it would break the Challenger's codebase-verification capability,
+which is worth more than the divergence costs.
+
+Two consequences the implementation must honor:
 
 1. The run report and `RUN/models.json` record which roles ran externally, so a reader knows
-   that for those roles isolation was prompt-level and workspace-bounded, not structural.
-2. The README's existing framing — "half the isolation is structural... the other half is
-   still discipline" — extends to say that for external roles, less of it is structural.
+   that for those roles isolation was prompt-level, not structural.
+2. The substituted output-contract text also instructs external roles not to inspect version
+   control. This is unenforceable, which is exactly why it belongs in the prompt rather than
+   the sandbox: it moves task reconstruction from default agent behavior to observable
+   disobedience. Nothing should be counted on it.
+
+### Why not Gemini CLI
+
+[DATA] `gemini 0.59.0` cannot be authenticated by signing in: it returns "This client is no
+longer supported for Gemini Code Assist for individuals," directing users to Antigravity.
+`GEMINI_API_KEY` and Vertex paths remain, but building a provider on a path its vendor is
+actively deprecating buys a maintenance burden for a model reachable through Antigravity
+anyway.
+
+[DATA] One finding from it survives as a design constraint regardless of provider: `gemini`
+exited **code 0** having done nothing, printing only an approval-override notice and an auth
+error. **Exit status is not a success signal.** The written artifact is.
+
+### Sequencing: Codex first, Antigravity gated
+
+The isolation probes below are blocking, and an uninstalled CLI cannot be probed. Therefore:
+**Codex ships in this plan. Antigravity does not.** Antigravity stays in the design — config
+schema, adapter dispatch, capture strategy — but is not done until it is installed and its
+probes pass. Shipping it behind an unrun probe would be shipping exactly the silent failure
+this spec exists to prevent.
 
 ## Design
 
@@ -138,7 +200,8 @@ implementation must honor:
 ```
 
 A value is `<provider>` or `<provider>:<model>`, split on the first colon. Providers are
-`claude`, `codex`, `gemini`. Omitting the model half means that CLI picks its own default.
+`claude`, `codex`, `antigravity`. Omitting the model half means that CLI picks its own
+default.
 
 A missing file, a missing `models` key, or a missing role key all resolve to `claude`. A
 project that never creates this file behaves exactly as the plugin does today.
@@ -152,7 +215,7 @@ that does not exist.
 `/jugalbandi:plan` accepts `--proposer=`, `--challenger=`, and `--resolver=` flags:
 
 ```
-/jugalbandi:plan Add multi-region failover --challenger=codex --resolver=gemini:gemini-2.5-pro
+/jugalbandi:plan Add multi-region failover --challenger=codex --resolver=antigravity
 ```
 
 Parsed and stripped from the task text the same way `--rounds 2` already is, before the
@@ -179,21 +242,23 @@ Behavior:
    any environment variable to find its own package — it runs with `cwd` set to the target
    project, which is a different tree entirely.
 2. Strip the YAML frontmatter; the body is the role instructions.
-3. Build the same isolated user message the native-subagent path sends for that role, copied
-   verbatim from the SKILL.md prose. The Challenger's is `Read <path>. That file is the
-   entire proposal under review — it is all the context you get. Write your challenges to
-   <output>.`
-4. Concatenate instructions and message into one prompt. Neither CLI exposes a separate
+3. Replace the body's `## Output contract` section with the external-role variant: return the
+   full artifact as the final message, write no files, do not inspect version control.
+4. Build the same isolated user message the native-subagent path sends for that role, copied
+   verbatim from the SKILL.md prose, minus the "write your output to <path>" clause that no
+   longer applies. The Challenger's is `Read <path>. That file is the entire proposal under
+   review — it is all the context you get.`
+5. Concatenate instructions and message into one prompt. No CLI here exposes a separate
    system-prompt channel, so the role definition rides in the single prompt.
-5. Spawn the CLI with `execFile`-style argv — never an interpolated shell string, because a
-   prompt containing a backtick or `$` would otherwise be a quoting bug or worse. Child
-   `cwd` is the project root; [DATA] Gemini has no `--cd` equivalent, so the child's working
-   directory is the only mechanism, and Codex's `-C` is passed for parity rather than
-   necessity. Stdin is not inherited.
-6. Enforce `--timeout` (default 10 minutes). On expiry, kill the child and exit non-zero.
-7. Verify the output file exists and is non-empty. **Do not trust the exit code** — [DATA]
-   Gemini returns 0 on an auth failure that produced no work. The written artifact is the
-   only success signal.
+6. Spawn the CLI with `execFile`-style argv — never an interpolated shell string, because a
+   prompt containing a backtick or `$` would otherwise be a quoting bug or worse. Child `cwd`
+   is the project root. Stdin is not inherited. Read-only permissions throughout, per
+   "External roles do not write".
+7. Enforce `--timeout` (default 10 minutes). On expiry, kill the child and exit non-zero.
+8. Capture the artifact — Codex via `--output-last-message`, Antigravity from stdout — and
+   write it to `--output`. An empty or missing final message is a failure.
+9. Verify the written file is non-empty. **Do not trust the exit code.**
+10. Record the resolved CLI version for the caller to store alongside the role assignment.
 
 ### Conductor branch
 
@@ -227,14 +292,17 @@ prompted — precisely the mode `plan/SKILL.md` step 7 goes out of its way to su
 1. Resolve the assignment: config file, then flags. Reject unknown providers and
    `claude:<model>` here, before anything launches.
 2. Write the resolved map to `RUN/models.json` before launching any role, so a run that dies
-   partway still records what it was configured to do.
+   partway still records what it was configured to do. After each external role completes,
+   append the CLI version it ran on — the ambient-loading behavior this spec guards against is
+   version-dependent, so an audit trail without versions cannot be re-examined after an
+   upgrade.
 3. Run Proposer, Challenger, Resolver in the existing order, each through its branch. The
    artifact contract is unchanged: `RUN/proposal.md`, `RUN/challenges.md`,
    `RUN/final-plan.md`, whichever model produced them.
 4. `--rounds 2` reuses each role's round-1 model.
 5. The step 6 report gains one line, naming external roles explicitly so the weaker isolation
    guarantee is visible in the report and not only in a file:
-   `Models: proposer=claude, challenger=codex (external), resolver=gemini:gemini-2.5-pro (external) — RUN/models.json`
+   `Models: proposer=claude, challenger=codex (external), resolver=antigravity (external) — RUN/models.json`
 
 ### Data flow — `/jugalbandi:challenge`, `/jugalbandi:review`
 
@@ -247,10 +315,10 @@ belongs to.
 | Condition | Behavior |
 |---|---|
 | Unknown provider, or `claude:<model>`, in config or flag | Stop before launching any role; report the offending value |
-| `codex`/`gemini` not on `PATH` | Stop; report the missing binary and which role wanted it |
-| Adapter exits non-zero | Stop; report the captured stdout/stderr tail |
+| CLI binary not on `PATH` | Stop; report the missing binary and which role wanted it |
+| Adapter exits non-zero | Stop; report the captured stderr tail |
 | Timeout expires | Kill the child; stop; report the timeout and the role |
-| Output file missing or empty | Treated as model failure; stop and report — regardless of exit code |
+| Final message empty, or written file empty | Treated as model failure; stop and report — regardless of exit code |
 
 No condition falls back to `claude` silently. A silent substitution would make
 `RUN/models.json` a false record, which is worse than a failed run — the file's only purpose
@@ -259,19 +327,46 @@ stopping when the project's own checks fail rather than proceeding on a broken f
 
 ## Testing
 
-**The isolation probe is the acceptance test for this feature.** Everything else is
-secondary, because everything else failing produces a visibly broken run, while this failing
-produces a run that looks correct and is not.
+**The isolation probes are the acceptance test for this feature.** Everything else is
+secondary, because everything else failing produces a visibly broken run, while these failing
+produce a run that looks correct and is not. They belong in CI, not in a one-time manual
+check: the isolation probe is the only thing standing between a CLI upgrade and a quietly
+invalid run.
 
-- **Isolation probe (required, blocking):** a scratch repo containing an `AGENTS.md` and a
-  `GEMINI.md` that name a task and a marker string. Run the Challenger role through the
-  adapter against a proposal that does not mention the marker. Assert the marker appears
-  nowhere in `challenges.md`, and assert the reproduction case — the same invocation without
-  the neutralization flags — does leak it. A probe that cannot demonstrate the failure it
-  guards against is not evidence the guard works. Run for each supported provider.
-- **Adapter, direct:** output file written and non-empty on success; non-zero exit on a
-  deliberately failing run; non-zero on a run whose CLI exits 0 without writing; timeout kills
-  the child.
+Two channels need separate probes, because neither detects the other.
+
+- **Probe A — ambient context leaking in (required, blocking).** A scratch repo containing an
+  `AGENTS.md` naming a task and a marker string. Run the Challenger role through the adapter
+  against a proposal that does not mention the marker. Assert the marker appears nowhere in
+  `challenges.md`, and assert the negative control — the same invocation without the
+  neutralization flags — does leak it. A probe that cannot demonstrate the failure it guards
+  against is not evidence the guard works.
+- **Probe B — cross-role leaking between invocations (required, blocking).** Probe A cannot
+  detect session persistence: a fresh scratch repo has no prior session, and one invocation
+  creates no predecessor. Session persistence is the channel by which the Challenger's context
+  would reach the Resolver, which is precisely the leak that turns a Jugalbandi run back into
+  self-critique. Run two roles in sequence in the same scratch directory with a distinct
+  marker planted only in role 1's *prompt* — in no file — and assert it appears nowhere in
+  role 2's artifact. An implementer who neutralizes instruction files but omits `--ephemeral`
+  passes Probe A cleanly and ships the adapter this spec exists to prevent.
+
+Both probes run per provider. Codex's must pass before this ships; Antigravity's before it
+is added.
+
+**Channel coverage.** The neutralization requirement enumerates four channels; the probes
+above cover repo instruction files and session persistence. The home-directory channel
+(`$CODEX_HOME/config.toml`, `~/.codex/`) is invisible to a scratch-repo probe in clean CI and
+will differ between CI and a developer machine — an adapter omitting `--ignore-user-config`
+passes in CI and leaks locally. Either plant a marker per channel, or state in the
+implementation which channels are flag-asserted rather than probe-verified. What is not
+acceptable is leaving the distinction implicit, because the spec makes the probe the
+acceptance criterion and unprobed bullets are then unenforced prose.
+
+Remaining cases:
+
+- **Adapter, direct:** artifact written and non-empty on success; non-zero exit on a
+  deliberately failing run; non-zero when the CLI exits 0 without producing a final message;
+  timeout kills the child.
 - **Regression:** `/jugalbandi:plan` with no config file and no flags. Artifacts and report
   must match today's shape exactly.
 - **Mixed assignment:** `/jugalbandi:plan --challenger=codex` against one of the five
@@ -288,8 +383,8 @@ produces a run that looks correct and is not.
 artifact output. The plugin gains a Node runtime dependency, but only on the path where a
 non-Claude provider is configured — an all-`claude` project never executes the script.
 
-The plugin takes on a maintenance burden it did not have: two external CLIs whose default
+The plugin takes on a maintenance burden it did not have: external CLIs whose default
 context-loading behavior can change between versions, in a direction that silently weakens
-the protocol rather than breaking it. The isolation probe is the only thing standing between
-a CLI upgrade and a quietly invalid run, which is why it belongs in CI rather than in a
-one-time manual check.
+the protocol rather than breaking it. That is why the probes live in CI and why
+`RUN/models.json` records CLI versions — after an upgrade changes behavior, the audit trail
+has to be able to answer which runs were affected.
