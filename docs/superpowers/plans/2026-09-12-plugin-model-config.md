@@ -201,9 +201,13 @@ test("claude with a model is rejected rather than truncated", () => {
 });
 
 test("antigravity is recognized but not enabled, with its own message", () => {
-  const err = assert.throws(() => parseAssignment("antigravity"));
-  assert.match(err.message, /probes have not been run/i);
-  assert.doesNotMatch(err.message, /unknown provider/i);
+  // assert.throws returns undefined — it has no return value. Use the validation
+  // function form to inspect the error, or this test throws on `err.message`.
+  assert.throws(() => parseAssignment("antigravity"), (err) => {
+    assert.match(err.message, /probes have not been run/i);
+    assert.doesNotMatch(err.message, /unknown provider/i);
+    return true;
+  });
 });
 
 test("absent config resolves every role to claude", () => {
@@ -339,11 +343,17 @@ try {
 
 - [ ] **Step 6: Verify the entry by hand**
 
+Use a path that does not exist, not `/dev/null`. `/dev/null` *does* exist and reads as
+`""`, so `JSON.parse` throws and both commands exit 1 on a parse error — the second one
+then appears to pass its `exit=1` check without ever reaching the antigravity branch.
+
 ```bash
-node plugins/jugalbandi/scripts/resolve-models.mjs --config /dev/null --challenger=codex
-node plugins/jugalbandi/scripts/resolve-models.mjs --config /dev/null --challenger=antigravity; echo "exit=$?"
+node plugins/jugalbandi/scripts/resolve-models.mjs --config /nonexistent.json --challenger=codex
+node plugins/jugalbandi/scripts/resolve-models.mjs --config /nonexistent.json --challenger=antigravity; echo "exit=$?"
 ```
-Expected: first prints JSON with `challenger.provider == "codex"`; second prints the not-enabled message and `exit=1`.
+Expected: the first prints JSON with `challenger.provider == "codex"`. The second prints
+a message containing *"probes have not been run"* and `exit=1`. **Check the message, not
+just the exit code** — an exit code alone cannot tell a rejected provider from a crash.
 
 - [ ] **Step 7: Commit**
 
@@ -360,9 +370,38 @@ git commit -m "Add per-role model assignment resolution"
 - Create: `plugins/jugalbandi/scripts/lib/role-prompt.mjs`
 - Test: `tests/role-prompt.test.mjs`
 
-**The trap in this task.** `resolver.md`'s `## Output contract` section contains a fenced code block whose lines begin at column 0 with `## Dispositions`, `## Revised Plan`, `## Open Questions for the Human`. A naive "find the next `^## `" splice matches *inside the fence*, deletes the opening fence, and leaves the old contract's final instruction — *"Then return as your final message: the disposition counts … and nothing else"* — sitting below the new one that says to return the whole artifact. The Resolver then gets two contradictory contracts, most likely obeys the old one, and fails validation. The section finder must be fence-aware, and one test must run against the real `resolver.md`.
+**The trap in this task, and the trap inside the trap.**
 
-- [ ] **Step 1: Write the failing tests**
+`resolver.md`'s `## Output contract` section contains a fenced code block whose lines begin at column 0 with `## Dispositions`, `## Revised Plan`, `## Open Questions for the Human`. A naive "find the next `^## `" splice matches *inside the fence*, deletes the opening fence, and leaves the old contract's final instruction — *"Then return as your final message: the disposition counts … and nothing else"* — sitting below the new one. Two contradictory contracts; the Resolver most likely obeys the old one and fails validation.
+
+So the finder must be fence-aware. **But a correct fence-aware splice removes the entire section — including that fenced block, which is the Resolver's artifact-structure template.** The buggy version preserved it by accident. Remove it properly and the external Resolver is never told the `### C1 — [TAG]` numbering convention, while Task 4's `challengeCount` rule requires exactly that convention. The run then dies at validation on the longest, most expensive role.
+
+Step 1 fixes this at the source, by separating delivery from structure in `resolver.md` itself.
+
+- [ ] **Step 1: Split `resolver.md`'s contract into delivery and structure**
+
+Only the *delivery* instruction should be swapped for an external role; the artifact's shape is part of the content contract and must survive. Restructure `plugins/jugalbandi/agents/resolver.md` so the fenced template lives under its own heading:
+
+```markdown
+## Output contract
+
+Write a single markdown file to the artifact path given to you, using the `Write` tool.
+Write to that path and no other file, following the structure below.
+
+Then return as your final message: the disposition counts (accepted / rejected /
+escalated) and the list of open questions verbatim, and nothing else.
+
+## Artifact structure
+
+```
+# Final Plan: <title>
+... the existing fenced template, unchanged ...
+```
+```
+
+The splice stops at the next *non-fenced* `^## `, which is now `## Artifact structure`, so the template survives. Verified: all five markers (`# Final Plan:`, `## Dispositions`, `### C1`, `## Revised Plan`, `## Open Questions for the Human`) are retained, fences stay balanced, and the delivery instruction is still removed. This also reads correctly for the native subagent, which is unaffected.
+
+- [ ] **Step 2: Write the failing tests**
 
 ```javascript
 import { test } from "node:test";
@@ -405,18 +444,24 @@ test("sections after the contract survive", () => {
   assert.ok(!out.includes("old"));
 });
 
-test("REGRESSION: resolver.md's fenced block does not fool the section finder", () => {
-  // resolver.md's contract contains a fence with `## Dispositions` at column 0. A
-  // non-fence-aware splice cuts there, orphaning a closing fence and retaining the
-  // old "return the disposition counts" instruction, which then contradicts the new
-  // contract. This is the bug this test exists for.
+test("REGRESSION: resolver.md splices cleanly and keeps its artifact template", () => {
+  // Two bugs in one test. (1) resolver.md's contract contains a fence with
+  // `## Dispositions` at column 0; a non-fence-aware splice cuts there, orphaning a
+  // fence and retaining the old "disposition counts" instruction that contradicts the
+  // new contract. (2) A *correct* splice then removes the artifact template along with
+  // the section — which is why Step 1 moved it under its own heading. Task 4's
+  // challengeCount rule requires the `### C1` convention this template is the only
+  // source of, so losing it kills the run at validation.
   const body = stripFrontmatter(
     readFileSync("plugins/jugalbandi/agents/resolver.md", "utf-8"),
   );
   const out = externalizeContract(body);
-  assert.ok(!/disposition counts/.test(out), "old contract instruction must be gone");
+  assert.ok(!/disposition counts/.test(out), "old delivery instruction must be gone");
   assert.equal((out.match(/```/g) ?? []).length % 2, 0, "code fences must stay balanced");
   assert.match(out, /Write no files/);
+  for (const marker of ["# Final Plan:", "## Dispositions", "### C1", "## Revised Plan"]) {
+    assert.ok(out.includes(marker), `artifact template must retain "${marker}"`);
+  }
 });
 
 test("buildPrompt puts instructions before the isolated message", () => {
@@ -425,12 +470,12 @@ test("buildPrompt puts instructions before the isolated message", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [ ] **Step 3: Run to verify it fails**
 
 Run: `node --test tests/role-prompt.test.mjs`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 4: Implement**
 
 ```javascript
 // Builds the prompt for an external role. The instructions are the role's own
@@ -488,12 +533,12 @@ export function buildPrompt(instructions, isolatedMessage) {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [ ] **Step 5: Run to verify it passes**
 
 Run: `node --test tests/role-prompt.test.mjs`
 Expected: PASS, 8 tests — including the resolver regression test
 
-- [ ] **Step 5: Eyeball the resolver output once**
+- [ ] **Step 6: Eyeball the resolver output once**
 
 ```bash
 node -e "
@@ -504,7 +549,7 @@ import('./plugins/jugalbandi/scripts/lib/role-prompt.mjs').then(m=>{
 ```
 Read it. The tests check for absence of the old instruction; you are checking the result still reads as coherent instructions to a model.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add plugins/jugalbandi/scripts/lib/role-prompt.mjs tests/role-prompt.test.mjs
@@ -765,7 +810,7 @@ git commit -m "Add per-provider invocation construction"
 Two details that will waste your time if you get them wrong:
 
 - **`execFile` silently ignores `stdio`.** Node forwards only `cwd/env/gid/uid/shell/signal/windowsHide/windowsVerbatimArguments` to `spawn`. The spec requires the child not inherit stdin, and `codex exec` is on record printing *"Reading additional input from stdin…"* — an inherited-but-never-closed stdin is a plausible ten-minute hang per role that the fake-CLI tests cannot reproduce. Use `spawn` with explicit `stdio`.
-- **The tests must not be able to reach the real `codex`.** The implementer's machine has it installed (Task 1 requires it). Set `env: { PATH: bin }` — replacing, not prepending — and launch the child with `process.execPath` so replacing PATH doesn't also break finding `node`.
+- **The tests must not be able to reach the real `codex`.** The implementer's machine has it installed (Task 1 requires it), so prepending the fake to `PATH` lets lookup fall through to the real one — burning tokens and failing for the wrong reason. Replace `PATH` instead: `env: { PATH: \`${bin}:/usr/bin:/bin\` }`. Not `bin` alone — `env` replaces rather than extends, and the fake is a shell script needing `sleep` and `cat`; with only `bin` it dies with "command not found" and four of the six tests fail. Launch the child with `process.execPath` so replacing `PATH` doesn't also break finding `node`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -803,12 +848,16 @@ exit ${exitCode}
 async function invoke(dir, bin, extra = []) {
   const out = join(dir, "challenges.md");
   // PATH is REPLACED, not prepended: prepending lets lookup fall through to the real
-  // codex on the implementer's machine, which would spend tokens and fail for the
-  // wrong reason. process.execPath is used so replacing PATH can't break finding node.
+  // codex on the implementer's machine, which would spend tokens and fail for the wrong
+  // reason. But it cannot be `bin` alone — `env` replaces rather than extends, and the
+  // fake codex is a shell script that needs `sleep` and `cat`. With only `bin` on PATH
+  // it dies with "sleep: command not found", writes nothing, and four of these six
+  // tests fail — while "exit 0 with no output" passes for entirely the wrong reason.
+  // /usr/bin:/bin supplies the coreutils and does not contain codex.
   return run(process.execPath, [
     SCRIPT, "--role", "challenger", "--provider", "codex",
     "--cwd", dir, "--input", join(dir, "proposal.md"), "--output", out, ...extra,
-  ], { env: { PATH: bin } })
+  ], { env: { PATH: `${bin}:/usr/bin:/bin` } })
     .then((r) => ({ ...r, out }))
     .catch((e) => ({ error: e, out }));
 }
@@ -925,6 +974,7 @@ function parseArgs(argv) {
 function isolatedMessage(role, args) {
   switch (role) {
     case "proposer":
+      if (!args.task && !args["task-file"]) die("proposer requires --task or --task-file");
       return args.task ?? readFileSync(args["task-file"], "utf-8");
     case "challenger":
       return `Read \`${args.input}\`. That file is the entire proposal under review — it is all the context you get.`;
@@ -1014,7 +1064,10 @@ child.on("close", (code) => {
 
   let cliVersion = "unknown";
   try {
-    cliVersion = execFileSync(invocation.command, ["--version"], { encoding: "utf-8" }).trim();
+    cliVersion = execFileSync(invocation.command, ["--version"], {
+      encoding: "utf-8",
+      timeout: 10_000,   // the artifact is already written; never hang on bookkeeping
+    }).trim();
   } catch { /* the run already succeeded; a missing version is not fatal */ }
 
   // Machine-readable so the conductor can fold it into RUN/models.json. The flag set
@@ -1035,8 +1088,13 @@ Expected: PASS, 6 tests
 
 - [ ] **Step 5: Run the whole unit suite**
 
-Run: `node --test tests/`
+Run: `node --test "tests/*.test.mjs"`
 Expected: PASS, 36 tests (9 + 8 + 8 + 5 + 6)
+
+**Not `node --test tests/`.** On Node 22 a bare directory argument is treated as a module
+to import, and it reports `# tests 1 / # pass 0 / # fail 1` — which reads like one
+failing test rather than zero tests discovered. Verified. Use the glob, or bare
+`node --test` (auto-discovery), which is also safe here since `src/` holds only `.ts`.
 
 - [ ] **Step 6: Commit**
 
@@ -1056,63 +1114,131 @@ Probe A cannot detect this channel: a fresh scratch repo has no prior session an
 **Files:**
 - Modify: `plugins/jugalbandi/scripts/probes/isolation.mjs`
 
+**Sessions are stored per `CODEX_HOME`, not per directory.** `resume --last` resumes by
+recency across that whole store, so two arms using different temp *directories* still
+share the developer's real `~/.codex`. Run the control arm first and the neutralized arm
+would resume the control's session, find the token, and report a false failure — halting
+the project on a bug that isn't there. Every arm below therefore gets its own
+`CODEX_HOME` and its own token, and the neutralized arm runs first.
+
 - [ ] **Step 1: Establish how state actually persists**
 
-Before writing the probe, find the real channel by hand. `codex exec resume --last` is the documented way to continue a prior session.
+Find the real channel by hand before encoding it. Note the per-arm `CODEX_HOME` and
+that `resume` is a subcommand of `exec`, so it comes immediately after `exec`.
 
 ```bash
-cd "$(mktemp -d)"
+export CODEX_HOME="$(mktemp -d)"; cd "$(mktemp -d)"
 codex exec --sandbox read-only --skip-git-repo-check "Remember this token: PERSEPHONE-9. Reply exactly ACK."
 codex exec resume --last --sandbox read-only --skip-git-repo-check "What token were you asked to remember? If none, reply NONE."
 ```
-Expected: the second call reports `PERSEPHONE-9`. **This is the negative control.** If it does not, find the channel that does before continuing — a probe built on a channel that carries nothing proves nothing.
+Expected: the second call reports `PERSEPHONE-9`. **This is the negative control.** If it
+does not, find the channel that does before continuing — a probe built on a channel that
+carries nothing proves nothing, which was exactly the defect in the first version of this
+probe.
 
-Then confirm `--ephemeral` breaks it:
+Then confirm `--ephemeral` breaks it, in a *fresh* `CODEX_HOME` so the session above
+cannot be the one resumed:
+
 ```bash
-cd "$(mktemp -d)"
-codex exec --ephemeral --sandbox read-only --skip-git-repo-check "Remember this token: PERSEPHONE-9. Reply exactly ACK."
+export CODEX_HOME="$(mktemp -d)"; cd "$(mktemp -d)"
+codex exec --ephemeral --sandbox read-only --skip-git-repo-check "Remember this token: CALLIOPE-4. Reply exactly ACK."
 codex exec resume --last --sandbox read-only --skip-git-repo-check "What token were you asked to remember? If none, reply NONE."
 ```
-Expected: `NONE`, or an error that no session exists — either is a pass.
+Expected: `NONE`, or an error that there is no session to resume — either is a pass.
 
 - [ ] **Step 2: Encode what Step 1 established**
 
+First extend `codex()` so each call can be given its own session store and so `resume`
+lands where it belongs — immediately after `exec`, since it is a subcommand:
+
 ```javascript
-const SECRET = "PERSEPHONE-9";
-const REMEMBER = `Remember this token for later: ${SECRET}. Reply exactly ACK.`;
-const RECALL = "What token were you asked to remember? If you were not asked to remember one, reply exactly NONE.";
+async function codex(dir, prompt, { neutralized, resume = false, home = null }) {
+  const args = [
+    "exec",
+    ...(resume ? ["resume", "--last"] : []),
+    "--sandbox", "read-only", "--skip-git-repo-check",
+    ...(neutralized ? NEUTRALIZE.codex : []),
+    prompt,
+  ];
+  const { stdout } = await run("codex", args, {
+    cwd: dir,
+    env: home ? { ...process.env, CODEX_HOME: home } : process.env,
+    timeout: 300_000,
+  });
+  return stdout;
+}
+```
+
+Then the probe:
+
+```javascript
+const RECALL =
+  "What token were you asked to remember? If you were not asked to remember one, reply exactly NONE.";
+const remember = (tok) => `Remember this token for later: ${tok}. Reply exactly ACK.`;
+
+/** Resume and read back. Distinguishes "nothing to resume" (the outcome we want) from
+ *  "codex failed to run" (which proves nothing and must not read as a pass). */
+async function readBack(dir, home, neutralized) {
+  try {
+    return { ran: true, text: await codex(dir, RECALL, { neutralized, resume: true, home }) };
+  } catch (err) {
+    const text = `${err.stdout ?? ""}${err.stderr ?? ""}`;
+    if (/no session|nothing to resume|not found/i.test(text)) return { ran: true, text: "" };
+    return { ran: false, text };
+  }
+}
 
 export async function probeB() {
-  // The marker is planted only in invocation 1's PROMPT — in no file anywhere. The
-  // only path by which a later invocation could know it is session persistence, which
-  // is the channel that would carry the Challenger's context into the Resolver and
-  // collapse the protocol into self-critique.
-  const control = mkdtempSync(join(tmpdir(), "jb-probeB-ctl-"));
-  const clean = mkdtempSync(join(tmpdir(), "jb-probeB-"));
+  // The token is planted only in a PROMPT — in no file anywhere. The only path by which
+  // a later invocation could know it is session persistence, the channel that would
+  // carry the Challenger's context into the Resolver and collapse the protocol into
+  // self-critique.
+  //
+  // Each arm gets its own CODEX_HOME and its own token. Sessions are stored per
+  // CODEX_HOME and `resume --last` picks by recency across the whole store, so sharing
+  // one home lets the neutralized arm resume the control arm's session and report a
+  // false failure. The neutralized arm also runs first, belt and braces.
+  const arms = {
+    clean: { dir: mkdtempSync(join(tmpdir(), "jb-pB-clean-")), home: mkdtempSync(join(tmpdir(), "jb-pB-home-clean-")), token: "CALLIOPE-4" },
+    control: { dir: mkdtempSync(join(tmpdir(), "jb-pB-ctl-")), home: mkdtempSync(join(tmpdir(), "jb-pB-home-ctl-")), token: "PERSEPHONE-9" },
+  };
   try {
-    // Arm 1 — the channel must demonstrably carry state, or arm 2 proves nothing.
-    await codex(control, REMEMBER, { neutralized: false });
-    const recalled = await codex(control, RECALL, { neutralized: false, extra: ["resume", "--last"] })
-      .catch((e) => e.stdout ?? "");
-    if (!recalled.includes(SECRET)) {
-      return { ok: false, why: "negative control did not persist — the probe is measuring nothing" };
+    // Neutralized arm — must NOT recall.
+    const { dir: cd, home: ch, token: ct } = arms.clean;
+    await codex(cd, remember(ct), { neutralized: true, home: ch });
+    const after = await readBack(cd, ch, true);
+    if (!after.ran) {
+      return { ok: false, why: `neutralized arm could not run codex: ${after.text.slice(-300)}` };
+    }
+    if (after.text.includes(ct)) {
+      return { ok: false, why: `neutralized run recalled ${ct} — sessions are persisting` };
     }
 
-    // Arm 2 — the same sequence, neutralized, must not.
-    await codex(clean, REMEMBER, { neutralized: true });
-    const after = await codex(clean, RECALL, { neutralized: true, extra: ["resume", "--last"] })
-      .catch((e) => e.stdout ?? "");   // "no session to resume" is a pass
-    if (after.includes(SECRET)) {
-      return { ok: false, why: `neutralized run recalled ${SECRET} — sessions are persisting` };
+    // Control arm — must recall, or arm 1's clean result proves nothing.
+    const { dir: xd, home: xh, token: xt } = arms.control;
+    await codex(xd, remember(xt), { neutralized: false, home: xh });
+    const recalled = await readBack(xd, xh, false);
+    if (!recalled.ran) {
+      return { ok: false, why: `control arm could not run codex: ${recalled.text.slice(-300)}` };
+    }
+    if (!recalled.text.includes(xt)) {
+      return { ok: false, why: "negative control did not persist — the probe is measuring nothing" };
     }
     return { ok: true };
   } finally {
-    for (const d of [control, clean]) rmSync(d, { recursive: true, force: true });
+    for (const a of Object.values(arms)) {
+      rmSync(a.dir, { recursive: true, force: true });
+      rmSync(a.home, { recursive: true, force: true });
+    }
   }
 }
 ```
 
-Note `resume --last` goes before the other flags in `codex exec`'s argv; adjust the `extra` splice point in `codex()` if Step 1 shows otherwise.
+**What this does and does not test.** The adapter never passes `resume`, so this is not
+testing the threatened path directly. It tests whether `--ephemeral` prevents a session
+from being *written*, using explicit resumption as the read-back mechanism. That is a
+real, falsifiable property and the right proxy — but say so in the commit message rather
+than claiming the probe covers cross-role leakage in general.
 
 - [ ] **Step 3: Add it to the runner and record channel coverage**
 
@@ -1302,8 +1428,12 @@ git commit -m "Wire per-role model dispatch into challenge and review"
 - [ ] **Step 1: Replace the test stub**
 
 ```json
-"test": "node --test tests/"
+"test": "node --test \"tests/*.test.mjs\""
 ```
+
+A bare `tests/` directory argument discovers nothing on Node 22 and reports a single
+phantom failure — see Task 6 Step 5. This is also the command `/jugalbandi:review` runs
+as "the project's own checks", so getting it wrong would halt every review.
 
 - [ ] **Step 2: Add unit tests to the existing validate job**
 
@@ -1356,9 +1486,9 @@ git commit -m "Add test script, isolation probe CI job, and model config docs"
 
 ## Done means
 
-- `node --test tests/` passes, 36 tests.
+- `node --test "tests/*.test.mjs"` passes, 36 tests. (Not `node --test tests/` — that discovers nothing and reports a phantom failure.)
 - Both probes pass, **including each one's negative control actually failing** — a green probe whose control arm cannot fail is not evidence.
-- `externalizeContract` against the real `resolver.md` leaves balanced code fences and no trace of the old "return the disposition counts" instruction.
+- `externalizeContract` against the real `resolver.md` leaves balanced code fences, no trace of the old "return the disposition counts" instruction, **and an intact `### C1` artifact template** — without which the Resolver cannot satisfy its own validation.
 - `/jugalbandi:plan` with no config file produces artifacts and a report identical in shape to today's.
 - `/jugalbandi:plan --challenger=codex --rounds 2` runs the Challenger on codex in **both** rounds, and `RUN/models.json` names the provider, the CLI version, and the neutralization flags.
 - A config naming `antigravity` stops the run with a message about unrun probes, not an unknown-provider error.
