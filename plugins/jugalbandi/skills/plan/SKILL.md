@@ -2,7 +2,7 @@
 name: plan
 description: Run the Jugalbandi dialectical protocol on a task — Proposer, Challenger, and Resolver in isolated subagent contexts — to surface hidden assumptions before any code is written. Use for ambiguous, high-stakes, or hard-to-reverse work where the real risk is building the wrong thing, not building it badly.
 argument-hint: "[task description] [--rounds 1|2]"
-allowed-tools: Bash(mkdir -p *), Bash(date *)
+allowed-tools: Bash(mkdir -p *), Bash(date *), Bash(node *), Bash(cat .jugalbandi.json*)
 ---
 
 # Jugalbandi: dialectical planning
@@ -18,6 +18,9 @@ conversation, and state in one line which task you inferred before proceeding.
 If the task text contains `--rounds 2`, strip that flag from the task before passing it
 to the Proposer and run the second round in step 7. Anything else, including
 `--rounds 1` or no flag at all, is a single round. Never run more than two rounds.
+
+Strip `--challenger=<value>` the same way, before the task text reaches the Proposer. It
+selects which model plays the Challenger; see step 1.5.
 
 ## The isolation rules
 
@@ -59,6 +62,26 @@ self-critique, which is the baseline this is measured against.
    Call that directory `RUN` below. If `.jugalbandi/` is not in the project's
    `.gitignore`, mention that at the end — don't edit `.gitignore` yourself.
 
+1.5 **Resolve which model plays the Challenger.** Run:
+
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-models.mjs" [--challenger=X]
+   ```
+
+   It reads `.jugalbandi.json` from the project root if present, applies the flag, and
+   prints the resolved assignment as JSON. A non-zero exit means a bad value — report its
+   message verbatim and stop before launching anything. Do not re-implement its rules
+   here; in particular, only the Challenger may be assigned an external provider, and the
+   script says so by name when someone assigns one to another role.
+
+   Write that JSON to `RUN/models.json`. If the Challenger runs externally it prints a
+   `jugalbandi-role:{...}` line carrying its CLI version and neutralization flags — merge
+   that in. A version says which runs a CLI upgrade affected; the flags say whether those
+   runs were actually neutralized.
+
+   If the script cannot be found, say so and stop. Never silently fall back to `claude` —
+   that would make `RUN/models.json` a false record, which is worse than a failed run.
+
 2. **Proposer.** Launch the `jugalbandi:proposer` subagent. Its prompt is the task
    text plus this line:
 
@@ -66,12 +89,31 @@ self-critique, which is the baseline this is measured against.
 
    Nothing else goes in that prompt.
 
-3. **Challenger.** Launch the `jugalbandi:challenger` subagent. Its prompt is exactly:
+3. **Challenger.** If step 1.5 resolved the Challenger to `claude`, launch the
+   `jugalbandi:challenger` subagent. Its prompt is exactly:
 
    > Read `RUN/proposal.md`. That file is the entire proposal under review — it is all
    > the context you get. Write your challenges to `RUN/challenges.md`.
 
    Do not add the task. Do not add context. This prompt is the whole prompt.
+
+   **If it resolved to any other provider, run the adapter instead and do not launch the
+   subagent:**
+
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/run-role.mjs" --provider <p> [--model <m>] \
+     --cwd "$(pwd)" --input RUN/proposal.md --output RUN/challenges.md
+   ```
+
+   A non-zero exit stops the run. Report the script's stderr verbatim. Do not fall back to
+   `claude` and do not retry with different flags — the adapter validates its own output,
+   so a failure means the Challenger produced nothing usable, not that the call needs
+   tweaking.
+
+   An external Challenger's isolation is prompt-level, not structural: the harness cannot
+   enforce it the way it does for a subagent, and the adapter's neutralization flags are
+   verified by `scripts/probes/isolation.mjs` rather than by the runtime. Say "(external)"
+   when you report it in step 6 so a reader knows which guarantee applied.
 
 4. **Resolver.** Launch the `jugalbandi:resolver` subagent. Its prompt is exactly:
 
@@ -91,6 +133,11 @@ self-critique, which is the baseline this is measured against.
    - The two or three accepted challenges that changed the plan most, one line each —
      this is the part worth the compute, so make it legible.
    - After a second round, the novelty line from step 7.4.
+   - One line naming the Challenger's model, marking it external when it was, so the
+     weaker isolation guarantee is visible in the report and not only in a file:
+     `Challenger: codex (external) — prompt-level isolation, see RUN/models.json`
+     Omit the line entirely when the Challenger ran on `claude`, which is the default and
+     needs no remark.
    - The artifact paths, so the user can read the raw proposal and challenges.
 
    **Put all of this in your reply, not only in the files.** A path is not a report.
@@ -156,6 +203,18 @@ Run these after step 4:
 
    > Read `RUN/round-2/proposal.md`. That file is the entire proposal under review — it
    > is all the context you get. Write your challenges to `RUN/round-2/challenges.md`.
+
+   **This round uses the same model step 1.5 resolved** — take the same branch as step 3.
+   If the Challenger is external, run the adapter here too, against the round-2 paths:
+
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/run-role.mjs" --provider <p> [--model <m>] \
+     --cwd "$(pwd)" --input RUN/round-2/proposal.md --output RUN/round-2/challenges.md
+   ```
+
+   Forgetting this is the easy mistake: round 2 would silently run on `claude` while
+   `RUN/models.json` claims otherwise, which is exactly the false record the no-fallback
+   rule exists to prevent.
 
 3. **Resolver, again.** Same prompt shape as step 4, against the round-2 paths. The
    round-2 Resolver sees the round-2 proposal and challenges only — not round 1's

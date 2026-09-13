@@ -257,6 +257,55 @@ The plugin adapts the protocol for a real codebase. Two deliberate changes:
 Everything else is preserved, including the Challenger's inability to approve and the
 Resolver's obligation to disposition every challenge individually.
 
+## Running the Challenger on another model
+
+The Challenger — and only the Challenger — can run on the `codex` CLI instead of a Claude
+subagent. Create `.jugalbandi.json` in your project root:
+
+```json
+{ "models": { "challenger": "codex" } }
+```
+
+Or pin a model: `"codex:gpt-5.1-codex"`. Override for a single run with
+`/jugalbandi:plan <task> --challenger=codex`. With no config file, everything runs on
+Claude exactly as before.
+
+Assigning any other role an external provider is rejected by name rather than ignored — a
+config that silently did nothing would let you believe a model you never used produced
+the plan.
+
+**This is a capability, not a validated improvement.** Nothing here has been shown to
+produce better plans. The experiment that motivated it — whether a different model's
+blind spots surface assumptions Claude's misses — collapsed when the metric behind it
+turned out to be measuring prompt formatting rather than protocol structure
+([findings](../../docs/findings/2026-09-12-assumption-metric-confound.md)). Use it because
+you want a different adversary, not because the numbers say to.
+
+### What you give up
+
+An external Challenger's isolation is **prompt-level, not structural**. A Claude subagent
+cannot see the task because the harness will not let it. An external CLI is a full agent
+harness with its own ideas about what a session starts with, and three things were
+measured about it:
+
+- It preloads `AGENTS.md` into context before your prompt arrives. In a repo that has one
+  describing the current work, an un-neutralized Challenger reads the task it must never
+  see. The adapter passes flags that close this, verified by
+  `scripts/probes/isolation.mjs` — and verified means a probe that demonstrably fails
+  without them, not a flag list someone eyeballed.
+- **It can read `git log`.** A read-only sandbox blocks writes, not command execution, so
+  an external Challenger can reconstruct the task from repository history. The prompt
+  tells it not to. Nothing enforces that. This is the real cost of the feature.
+- Its output is whatever it says last, so the adapter validates the artifact structurally
+  before writing it. A prose summary is rejected rather than silently producing a run with
+  zero challenges.
+
+Reports mark an external Challenger as `(external)` so you know which guarantee applied.
+
+Requires the `codex` CLI installed and authenticated. If it is missing, the run stops and
+says so — it never falls back to Claude, because a silent substitution would make the
+run's own `models.json` a false record.
+
 ## Cost
 
 One `/jugalbandi:plan` is three subagent runs, each reading code. It's meaningfully more

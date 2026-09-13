@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Weekly. The isolation probes below are the only thing standing between a codex
+    # upgrade that reopens a context channel and a quietly invalid run — a failure mode
+    # that changes nothing visible in the output, so nothing else would catch it.
+    - cron: "0 6 * * 1"
 
 jobs:
   validate:
@@ -34,3 +39,32 @@ jobs:
       # skills referencing agents that aren't shipped.
       - name: Check plugin cross-references
         run: node scripts/check-plugin.mjs
+
+      # No dependencies and no network — the adapter's pure logic plus a fake CLI.
+      - name: Unit tests
+        run: npm test
+
+  isolation:
+    name: Isolation probes
+    runs-on: ubuntu-latest
+    # These call a real model and cost real tokens, so they cannot gate every pull
+    # request the way the static checks do. They run on a schedule and on demand.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
+      # NOTE: unverified in CI. `--ignore-user-config` is in the neutralization set, and
+      # whether codex still reads OPENAI_API_KEY under it has not been confirmed on a
+      # clean image. If this job starts failing on auth rather than on a leak, that is
+      # the first thing to check — see plugins/jugalbandi/scripts/probes/isolation.mjs.
+      - name: Run isolation probes
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node plugins/jugalbandi/scripts/probes/isolation.mjs
