@@ -1,8 +1,12 @@
 # The assumption-surfacing gap measures a prompt, not the protocol
 
 **Date:** 2026-09-12
-**Status:** Confound identified; corrected re-run in progress
+**Status:** Complete. Confound confirmed and quantified against the original data.
 **Affects:** The README's headline result, and H1/H3 in `commitment/hypotheses.md`
+
+> **Result in one line:** re-scored with a blind semantic judge, the published 2.7x
+> assumption gap is **1.34x** at the Proposer, and **1.07x — not statistically
+> significant** at the Resolver, which is the output the protocol actually delivers.
 
 ## The claim under examination
 
@@ -158,7 +162,7 @@ ruled out for the *escalation* claim): the same concern applies to the headline
 assumption claim, and with more force, since the escalation claim at least involves the
 Resolver.
 
-## The corrected experiment
+## Appendix: the corrected experiment as designed
 
 Three arms, same five tasks, same pinned model (`claude-sonnet-4-20250514`):
 
@@ -177,7 +181,105 @@ remaining is the architecture?**
   much stronger foundation than it currently has.
 - Anything in between is the interesting case, and is quantifiable.
 
-## Limitations of the re-run
+## Results
+
+Every arm's raw output from the original five tasks, re-scored by the blind judge
+(`src/judge.ts`), ten repeats per text, 150 judge calls, $2.60 measured
+(389,513 input / 182,442 output tokens). Raw data: `results/rescored/assumptions.json`.
+
+### The regex undercounts the two arms by very different amounts
+
+| | regex mean | judge mean | regex captured |
+|---|---|---|---|
+| single_pass | 9.4 | 25.4 | **37%** |
+| proposer | 27.4 | 34.1 | **80%** |
+
+This is the confound, measured. The control arm's assumptions are scattered through its
+prose, so a heading-keyed counter finds barely a third of them. The Proposer is instructed
+to write `## Assumptions`, so its assumptions sit exactly where the counter looks and four
+in five are found. **The published gap is largely the difference between those two capture
+rates, not a difference in the plans.**
+
+(Note: the regex `single_pass` mean of 9.4 reproduces the README's figure exactly. The
+regex `proposer` mean computes to 27.4 from the same files, where the README reports 25.4 —
+a small discrepancy in the published table, separate from everything else here.)
+
+### Per-task judge means (n=10 each, SD in parentheses)
+
+| task | single_pass | proposer | resolver | P − S | t |
+|---|---|---|---|---|---|
+| login | 29.5 (2.9) | 47.3 (2.8) | 34.1 (3.8) | +17.8 | 14.1 |
+| cicd | 27.0 (2.4) | 35.1 (2.2) | 33.7 (6.0) | +8.1 | 7.8 |
+| multitenant | 26.2 (3.2) | 28.7 (0.9) | 18.4 (1.7) | +2.5 | 2.4 |
+| notifications | 25.2 (2.0) | 32.9 (4.5) | 25.1 (3.0) | +7.7 | 5.0 |
+| migration | 18.9 (2.2) | 26.4 (2.0) | 24.6 (1.6) | +7.5 | 7.9 |
+| **pooled** | **25.4** | **34.1** | **27.2** | | |
+
+An earlier version of this analysis proposed rejecting any difference smaller than the
+judge's observed *range*. That heuristic was too crude: at n=10 the standard error is far
+below the range, and a Welch test is the right instrument. By that test the Proposer
+advantage is detectable on all five tasks — it is real, just far smaller than advertised.
+
+**Proposer vs single-pass: 1.34x** (published: 2.7x).
+
+### The protocol's actual deliverable shows no reliable advantage
+
+The Resolver's output is what a user receives. The original instrument never measured it.
+
+| task | resolver − single_pass | t | |
+|---|---|---|---|
+| login | +4.6 | 3.0 | better |
+| cicd | +6.7 | 3.3 | better |
+| multitenant | **−7.8** | −6.9 | **worse** |
+| notifications | −0.1 | −0.1 | no difference |
+| migration | +5.7 | 6.5 | better |
+
+Mean difference +1.8 (SD 6.0). Paired across the five tasks, **t = 0.68 against a
+threshold of 2.78 — not significant.**
+
+**Resolver vs single-pass: 1.07x, and the direction is inconsistent.** Three tasks better,
+one indistinguishable, one significantly worse. On `multitenant` the full three-role
+protocol delivered a plan with meaningfully *fewer* surfaced assumptions than a single pass.
+
+This is the finding that matters most, and it is the one the original instrument was
+structurally incapable of producing: it measured a mid-pipeline draft and stopped there.
+The Proposer does enumerate more than a single pass. The Challenger and Resolver then
+consolidate, resolve, and discard — and what comes out the far end is, on this evidence,
+about the same as what one call produces.
+
+### What survives
+
+- **The Proposer surfaces more assumptions than a single pass.** Real, detectable on all
+  five tasks, ~1.34x. Since both are single calls, this is a finding about
+  `PROPOSER_PROMPT` versus `BASELINE_PROMPT` — a prompting result, not an architectural one.
+- **The three-role protocol's final output does not reliably beat a single pass** on this
+  metric, on these five tasks.
+- **The published 2.7x figure does not survive.** Roughly half of it was the instrument
+  crediting the treatment arm for formatting it was told to produce.
+
+## Limitations
+
+**A noisy instrument replaced a biased one.** The judge's SD runs 0.9–6.0 per cell, and it
+cannot be pinned deterministically (`temperature` is deprecated on the current model). Ten
+repeats bring the standard error down enough for the tests above, but the judge is not
+exact, and a different judge prompt would likely produce different absolute counts. What
+should be trusted here is the *ratio between arms under one identical judge*, not the
+absolute numbers.
+
+**Five tasks.** The per-task tests are well-powered; the across-task test is n=5, which is
+why the Resolver result is reported as "not significant" rather than "no effect". A larger
+task set could resolve it either way.
+
+**The judge model is not the generating model.** The texts came from
+`claude-sonnet-4-20250514`; the judge is `claude-sonnet-5`. This is fine for a *comparison*
+— every arm is scored by the same judge — but the absolute counts carry that judge's
+notion of what counts as an assumption.
+
+**Single generation per arm.** Each original text is one sample. Generation variance was
+never measured in this project and is not measured here; only judging variance is. Two
+Proposer runs on the same task might differ by more than the gap being reported.
+
+## Notes on the aborted fresh re-run
 
 **The original model is gone.** `claude-sonnet-4-20250514` now returns `not_found_error`.
 Discovered by smoke-testing one task before committing to all five. The consequence is
