@@ -1,3 +1,4 @@
+import "./env.js"; // must come first: loads ANTHROPIC_API_KEY before any client is built
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { judgeRepeated } from "./judge.js";

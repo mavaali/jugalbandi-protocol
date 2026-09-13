@@ -37,6 +37,9 @@ An assumption counts wherever it appears — a dedicated section, a bulleted lis
 prose, or embedded inside a technical decision. Headings and formatting are irrelevant to
 your count; judge the substance only.
 
+Label each assumption in at most eight words. The labels exist so a human can audit what
+you counted, not to restate the plan — keep them terse.
+
 Respond with JSON and nothing else, in exactly this shape:
 {"assumptions": ["short label", "short label", ...]}`;
 
@@ -49,8 +52,13 @@ export async function judgeAssumptions(text: string): Promise<JudgeResult> {
   const client = new Anthropic();
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 4096,
-    temperature: 0,
+    // Generous, because a long list of assumptions is the expected case and a truncated
+    // response is an undercount. 4096 was not enough: it clipped mid-string on an output
+    // with ~39 assumptions, which is exactly the high-count case the measurement is for.
+    max_tokens: 16000,
+    // No temperature: deprecated for this model, so determinism cannot be pinned here.
+    // That is precisely why judgeRepeated exists and why its spread is reported alongside
+    // every result rather than treated as a formality.
     system: JUDGE_PROMPT,
     messages: [{ role: "user", content: text }],
   });
