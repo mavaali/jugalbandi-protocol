@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { BASELINE_PROMPT } from "./prompts.js";
+import { MODEL } from "./model.js";
 
-const MODEL = "claude-sonnet-4-20250514";
 
 export interface CouncilResult {
   outputs: string[];

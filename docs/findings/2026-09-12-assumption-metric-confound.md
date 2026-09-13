@@ -140,12 +140,31 @@ remaining is the architecture?**
 
 ## Limitations of the re-run
 
+**The original model is gone.** `claude-sonnet-4-20250514` now returns `not_found_error`.
+Discovered by smoke-testing one task before committing to all five. The consequence is
+specific and important:
+
+- The re-run **cannot reproduce** the README's 9.4 / 14.2 / 25.4 figures, and its absolute
+  numbers are not comparable to them. Any table combining the two would be comparing
+  across an uncontrolled model change.
+- The re-run **can still answer the question**, because the ablation is a *within-run*
+  comparison. All three arms share one model, so the difference between
+  `single_pass`, `single_pass_matched`, and `jugalbandi` is internally valid whatever
+  model produces them.
+
+The model constant now lives in `src/model.ts` with a `JUGALBANDI_MODEL` override, rather
+than being pinned separately in three files that must move together.
+
+A side effect worth noting: because the original claim was measured on a model that no
+longer exists, *no* future run can reproduce it. The published number is now unfalsifiable
+in its original form. That is an argument for reporting the within-run ratio as the
+durable result rather than the absolute counts.
+
 **N=1 per arm per task**, matching the original methodology. Within-task variance has
 never been measured in this project, and the Proposer's across-task spread (15–39)
 suggests it may not be small. A single run cannot distinguish a real effect from sampling
 noise. Any difference smaller than that unmeasured variance should not be reported as a
 result.
 
-The model is pinned, so model drift is controlled. Task wording is unchanged. The
-original results are preserved in `results/v1-original/` so the re-run cannot overwrite
-the data the published claim rests on.
+Task wording is unchanged. The original results are preserved in `results/v1-original/`
+so the re-run cannot overwrite the data the published claim rests on.
