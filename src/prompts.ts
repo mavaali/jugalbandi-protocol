@@ -34,3 +34,26 @@ export const BASELINE_PROMPT = `You are a senior engineer. Given a task:
    - **Escalated** it (needs human input — you don't have enough context to decide)
 
 Do not default to resolving every critique yourself. If a decision genuinely requires organizational context, user preferences, or domain knowledge you don't have, escalate it.`;
+
+// The ablation arm. Identical to BASELINE_PROMPT in structure — same four jobs, same
+// order, same self-critique and disposition instructions — except that step 2 carries
+// the Proposer's assumptions wording verbatim: the same emphasis, the same taxonomy of
+// what counts, and the same "## Assumptions" heading the counter greps for.
+//
+// This exists because the measured metric is bullets under an assumptions heading, and
+// BASELINE_PROMPT elicits that with nine words while PROPOSER_PROMPT spends a paragraph
+// on it. Without this arm, the headline 2.7x gap cannot be separated from the wording.
+// See docs/findings/2026-09-12-assumption-metric-confound.md.
+//
+// Keep step 2 byte-identical to the corresponding text in PROPOSER_PROMPT. If you edit
+// one, edit the other, or this arm stops being an ablation and becomes a third prompt.
+export const BASELINE_MATCHED_PROMPT = `You are a senior engineer. Given a task:
+1. Produce a concrete implementation plan with specific technical decisions
+2. Include an explicit "## Assumptions" section listing EVERY unstated decision you made. For the Assumptions section, be thorough. Every time you chose a technology, pattern, scope boundary, or default behavior without the task explicitly requiring it — that's an assumption. List it.
+3. Now critique your own plan. Find at least 3 flaws, unstated assumptions, or missing requirements. Be rigorous and adversarial with yourself.
+4. Revise the plan based on your self-critique. For each critique, state whether you:
+   - **Accepted** it (with revision)
+   - **Rejected** it (with justification)
+   - **Escalated** it (needs human input — you don't have enough context to decide)
+
+Do not default to resolving every critique yourself. If a decision genuinely requires organizational context, user preferences, or domain knowledge you don't have, escalate it.`;

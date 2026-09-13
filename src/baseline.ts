@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { BASELINE_PROMPT } from "./prompts.js";
+import { BASELINE_PROMPT, BASELINE_MATCHED_PROMPT } from "./prompts.js";
 
 const MODEL = "claude-sonnet-4-20250514";
 
@@ -34,14 +34,19 @@ function countCritiques(text: string): number {
   return countListItems(section);
 }
 
-export async function runBaseline(task: string): Promise<BaselineResult> {
+/**
+ * @param matched  Run the ablation arm: same four-job structure, but the assumptions
+ *                 step carries the Proposer's exact wording. Isolates how much of the
+ *                 measured gap is elicitation rather than architecture.
+ */
+export async function runBaseline(task: string, matched = false): Promise<BaselineResult> {
   const client = new Anthropic();
 
-  console.log("  [Baseline] single-pass generation...");
+  console.log(`  [Baseline${matched ? " matched" : ""}] single-pass generation...`);
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 4096,
-    system: BASELINE_PROMPT,
+    system: matched ? BASELINE_MATCHED_PROMPT : BASELINE_PROMPT,
     messages: [{ role: "user", content: task }],
   });
 

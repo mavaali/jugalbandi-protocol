@@ -27,6 +27,17 @@ interface TaskResult {
     plan_summary: string;
     raw_output: string;
   };
+  // Ablation arm: identical to single_pass except the assumptions step carries the
+  // Proposer's exact wording. The measured metric counts bullets under an assumptions
+  // heading, and the two original prompts elicit that very differently — so without this
+  // arm the headline gap cannot be attributed to the architecture.
+  // See docs/findings/2026-09-12-assumption-metric-confound.md
+  single_pass_matched: {
+    assumptions_surfaced: number;
+    self_critiques: number;
+    plan_summary: string;
+    raw_output: string;
+  };
   council: {
     total_assumptions: number;
     total_critiques: number;
@@ -69,6 +80,7 @@ async function main() {
     console.log(`\n=== Task ${id}: ${task} ===\n`);
 
     const baseline = await runBaseline(task);
+    const baselineMatched = await runBaseline(task, true);
     const council = await runCouncil(task);
     const jugalbandi = await runJugalbandi(task);
 
@@ -79,6 +91,12 @@ async function main() {
         self_critiques: baseline.self_critiques,
         plan_summary: baseline.plan_summary,
         raw_output: baseline.output,
+      },
+      single_pass_matched: {
+        assumptions_surfaced: baselineMatched.assumptions_surfaced,
+        self_critiques: baselineMatched.self_critiques,
+        plan_summary: baselineMatched.plan_summary,
+        raw_output: baselineMatched.output,
       },
       council: {
         total_assumptions: council.total_assumptions,
@@ -111,6 +129,7 @@ async function main() {
 
     console.log(`\n  Summary:`);
     console.log(`    Baseline:    ${baseline.assumptions_surfaced} assumptions, ${baseline.self_critiques} critiques, ${baseline.escalations} escalations`);
+    console.log(`    Baseline(m): ${baselineMatched.assumptions_surfaced} assumptions, ${baselineMatched.self_critiques} critiques, ${baselineMatched.escalations} escalations`);
     console.log(`    Council:     ${council.unique_assumptions_estimate} assumptions (est. unique), ${council.total_critiques} critiques (3 passes)`);
     console.log(`    Jugalbandi:  ${jugalbandi.proposer_assumptions} assumptions, ${jugalbandi.challenger_challenges} challenges`);
     console.log(`    Dispositions: ${JSON.stringify(jugalbandi.resolver_dispositions)}`);
