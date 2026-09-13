@@ -1,0 +1,88 @@
+{
+  "judge_model": "claude-sonnet-5",
+  "repeats": 10,
+  "generated": "2026-09-13T03:01:43.444Z",
+  "rows": [
+    {
+      "task": "login",
+      "arm": "single_pass",
+      "regex": 10,
+      "counts": [
+        32,
+        30,
+        30,
+        32,
+        25,
+        29,
+        34,
+        29,
+        29,
+        25
+      ],
+      "mean": 29.5,
+      "spread": 9
+    },
+    {
+      "task": "login",
+      "arm": "proposer",
+      "regex": 39,
+      "counts": [
+        45,
+        48,
+        44,
+        47,
+        46,
+        44,
+        49,
+        47,
+        51,
+        52
+      ],
+      "mean": 47.3,
+      "spread": 8
+    },
+    {
+      "task": "login",
+      "arm": "resolver",
+      "regex": -1,
+      "counts": [
+        29,
+        34,
+        39,
+        37,
+        35,
+        34,
+        27,
+        36,
+        32,
+        38
+      ],
+      "mean": 34.1,
+      "spread": 12
+    },
+    {
+      "task": "cicd",
+      "arm": "single_pass",
+      "regex": 10,
+      "counts": [
+        26,
+        26,
+        29
+      ],
+      "mean": 27,
+      "spread": 3
+    },
+    {
+      "task": "cicd",
+      "arm": "proposer",
+      "regex": 30,
+      "counts": [
+        37,
+        37,
+        34
+      ],
+      "mean": 36,
+      "spread": 3
+    }
+  ]
+}
