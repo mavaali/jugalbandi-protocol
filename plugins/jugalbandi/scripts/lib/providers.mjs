@@ -6,3 +6,24 @@
 export const NEUTRALIZE = {
   codex: ["--ephemeral", "--ignore-user-config", "-c", "project_doc_max_bytes=0"],
 };
+
+export function buildInvocation({ provider, model, prompt, cwd, lastMessageFile }) {
+  if (provider === "claude") {
+    throw new Error("claude runs as a native subagent and never goes through the adapter");
+  }
+  if (provider !== "codex") throw new Error(`unknown provider "${provider}"`);
+
+  return {
+    command: "codex",
+    args: [
+      "exec",
+      "--sandbox", "read-only",
+      "--skip-git-repo-check",
+      ...NEUTRALIZE.codex,
+      "-C", cwd,
+      "-o", lastMessageFile,
+      ...(model ? ["-m", model] : []),
+      prompt,
+    ],
+  };
+}
