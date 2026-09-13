@@ -1,7 +1,7 @@
 import "./env.js"; // must come first: loads ANTHROPIC_API_KEY before any client is built
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { judgeRepeated } from "./judge.js";
+import { judgeRepeated, totalUsage, formatUsage } from "./judge.js";
 import { MODEL } from "./model.js";
 
 // Re-scores the ORIGINAL five-task results with the semantic judge.
@@ -22,7 +22,7 @@ import { MODEL } from "./model.js";
 
 const REPEATS = (() => {
   const i = process.argv.indexOf("--repeats");
-  return i === -1 ? 3 : Math.max(1, parseInt(process.argv[i + 1], 10) || 3);
+  return i === -1 ? 10 : Math.max(1, parseInt(process.argv[i + 1], 10) || 10);
 })();
 
 const ROOT = resolve(import.meta.dirname!, "..");
@@ -73,14 +73,23 @@ async function main() {
     ];
 
     for (const [arm, text, regexCount] of arms) {
-      if (rows.some((r) => r.task === task && r.arm === arm)) {
-        console.log(`  ${task} / ${arm} ... cached`);
+      // Top up rather than skip. A cell scored at N=3 by an earlier run is three paid
+      // repeats toward N=10, not work to throw away — and skipping it outright would
+      // leave the set at mixed N, which makes the spread column meaningless.
+      const existing = rows.find((r) => r.task === task && r.arm === arm);
+      const have = existing?.counts.length ?? 0;
+      const need = REPEATS - have;
+
+      if (need <= 0) {
+        console.log(`  ${task} / ${arm} ... cached (${have} repeats)`);
         continue;
       }
-      process.stdout.write(`  ${task} / ${arm} ... `);
-      const counts = await judgeRepeated(text, REPEATS);
+      process.stdout.write(`  ${task} / ${arm} ... ${have ? `+${need} (have ${have}) ` : ""}`);
+
+      const counts = [...(existing?.counts ?? []), ...(await judgeRepeated(text, need))];
       const row: Row = { task, arm, regex: regexCount, counts, mean: mean(counts), spread: spread(counts) };
-      rows.push(row);
+      if (existing) Object.assign(existing, row);
+      else rows.push(row);
       save();
       console.log(`${counts.join(", ")}  (regex said ${regexCount === -1 ? "n/a" : regexCount})`);
     }
@@ -110,7 +119,8 @@ async function main() {
     `(regex claimed 2.7x)`);
   console.log(`  Largest within-text judge spread across ${REPEATS} repeats: ${worstSpread}`);
   console.log(`\n  A difference between arms smaller than that spread is not a finding.`);
-  console.log(`  → ${resolve(OUT, "assumptions.json")}`);
+  console.log(`\n  Spent this run: ${formatUsage(totalUsage)}`);
+  console.log(`  → ${outPath}`);
 }
 
 main();

@@ -43,9 +43,41 @@ you counted, not to restate the plan — keep them terse.
 Respond with JSON and nothing else, in exactly this shape:
 {"assumptions": ["short label", "short label", ...]}`;
 
+// Sonnet 5 rates, $ per million tokens. If MODEL is overridden to something else these
+// figures are wrong and the reported cost is meaningless — check before trusting it.
+const RATES: Record<string, { in: number; out: number }> = {
+  "claude-sonnet-5": { in: 2.0, out: 10.0 },
+  "claude-opus-5": { in: 5.0, out: 25.0 },
+  "claude-haiku-4-5": { in: 1.0, out: 5.0 },
+};
+
+export interface Usage {
+  input: number;
+  output: number;
+  cost: number;
+}
+
+// Accumulates across every judge call in a process, so a run reports what it actually
+// spent instead of an estimate. Thinking tokens bill as output and are the bulk of the
+// cost here, which is exactly the part an estimate gets wrong.
+export const totalUsage: Usage = { input: 0, output: 0, cost: 0 };
+
+export function costOf(input: number, output: number): number {
+  const r = RATES[MODEL];
+  if (!r) return 0; // unknown model: report 0 rather than invent a rate
+  return (input / 1e6) * r.in + (output / 1e6) * r.out;
+}
+
+export function formatUsage(u: Usage): string {
+  const known = MODEL in RATES;
+  return `${u.input.toLocaleString()} in / ${u.output.toLocaleString()} out` +
+    (known ? ` = $${u.cost.toFixed(3)}` : ` (no rate on file for ${MODEL})`);
+}
+
 export interface JudgeResult {
   count: number;
   labels: string[];
+  usage: Usage;
 }
 
 export async function judgeAssumptions(text: string): Promise<JudgeResult> {
@@ -77,7 +109,15 @@ export async function judgeAssumptions(text: string): Promise<JudgeResult> {
     throw new Error(`judge returned no assumptions array: ${raw.slice(0, 200)}`);
   }
   const labels = parsed.assumptions.map(String);
-  return { count: labels.length, labels };
+
+  const input = response.usage.input_tokens;
+  const output = response.usage.output_tokens;
+  const usage: Usage = { input, output, cost: costOf(input, output) };
+  totalUsage.input += input;
+  totalUsage.output += output;
+  totalUsage.cost += usage.cost;
+
+  return { count: labels.length, labels, usage };
 }
 
 /**
