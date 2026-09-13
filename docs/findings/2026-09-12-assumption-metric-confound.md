@@ -75,6 +75,45 @@ is the elicitation.
 The refutation matters. A budget confound would have been fixable by raising a number. An
 elicitation confound is a claim about what the experiment was actually comparing.
 
+## Finding 4: the same flaw appears in the second metric row, worse
+
+The README's other row is "Critiques/challenges (avg) | 4.8 | 12.8 | 7.2".
+
+`countCritiques` (`src/baseline.ts:26`) locates a self-critique heading, then counts either
+`^### ` subsections or list items matching `^[-*]\s` / `^\d+\.\s`. In the re-run's task 1,
+the original-prompt baseline produced a `## 3. Self-Critique` section containing five
+explicit flaws formatted as bold paragraphs:
+
+```
+**Flaw 1: Massive stack assumption with zero evidence.**
+**Flaw 2: Security decisions made silently that have real consequences.**
+...
+**Flaw 5: Compliance/organizational context ignored.**
+```
+
+`countCritiques` scored that section **0**. The critiques are present, substantive, and
+correctly numbered; they simply use a format the counter does not recognise.
+
+The Jugalbandi side of the same row is counted by `countChallengeTags`, which greps for the
+literal strings `[STRUCTURAL]`, `[ASSUMPTION]`, `[MISSING]` — strings `CHALLENGER_PROMPT`
+**requires the model to emit**:
+
+> Each challenge MUST be tagged with exactly one of: `[STRUCTURAL]` … `[ASSUMPTION]` …
+> `[MISSING]`
+
+So this is not two unrelated bugs. It is one pattern, in both rows of the results table:
+
+> **The instrumentation counts strings that only the treatment arm's prompt instructs the
+> model to produce.** The control arm is scored by guessing at formats it was never told
+> to use, and is silently undercounted whenever it guesses differently.
+
+For the assumptions row the effect is partial — both arms tend to produce *some* heading
+matching `/assumption/i`, so the control still scores 9–12 rather than 0. For the critiques
+row the effect can be total, as task 1 demonstrates: a real 5 recorded as 0.
+
+This makes the critiques row unusable as published, and it is the row that would have to
+carry any claim about the protocol producing *more scrutiny* rather than more enumeration.
+
 ## What is *not* a confound
 
 The baseline's four-job structure — plan, assumptions, self-critique, revision — is not
