@@ -44,7 +44,21 @@ interface Row {
 async function main() {
   mkdirSync(OUT, { recursive: true });
   const files = readdirSync(SRC).filter((f) => f.endsWith(".json")).sort();
-  const rows: Row[] = [];
+  const outPath = resolve(OUT, "assumptions.json");
+
+  // Resume from whatever is already scored. Each judge call costs money, and an earlier
+  // version of this script wrote its results only after every task finished — so when it
+  // died on an API error partway through, four completed tasks' worth of paid calls went
+  // with it. Persist after every cell and skip work already done.
+  let rows: Row[] = [];
+  try {
+    rows = JSON.parse(readFileSync(outPath, "utf-8")).rows ?? [];
+    if (rows.length) console.log(`  resuming — ${rows.length} cells already scored\n`);
+  } catch { /* first run */ }
+
+  const save = () => writeFileSync(outPath, JSON.stringify(
+    { judge_model: MODEL, repeats: REPEATS, generated: new Date().toISOString(), rows }, null, 2,
+  ));
 
   for (const file of files) {
     const data = JSON.parse(readFileSync(resolve(SRC, file), "utf-8"));
@@ -59,18 +73,20 @@ async function main() {
     ];
 
     for (const [arm, text, regexCount] of arms) {
+      if (rows.some((r) => r.task === task && r.arm === arm)) {
+        console.log(`  ${task} / ${arm} ... cached`);
+        continue;
+      }
       process.stdout.write(`  ${task} / ${arm} ... `);
       const counts = await judgeRepeated(text, REPEATS);
       const row: Row = { task, arm, regex: regexCount, counts, mean: mean(counts), spread: spread(counts) };
       rows.push(row);
+      save();
       console.log(`${counts.join(", ")}  (regex said ${regexCount === -1 ? "n/a" : regexCount})`);
     }
   }
 
-  writeFileSync(
-    resolve(OUT, "assumptions.json"),
-    JSON.stringify({ judge_model: MODEL, repeats: REPEATS, generated: new Date().toISOString(), rows }, null, 2),
-  );
+  save();
 
   // --- report -------------------------------------------------------------
   console.log(`\n${"task".padEnd(14)}${"arm".padEnd(13)}${"regex".padStart(6)}${"judge".padStart(8)}${"spread".padStart(8)}`);
