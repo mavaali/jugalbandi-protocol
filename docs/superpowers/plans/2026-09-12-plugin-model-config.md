@@ -12,15 +12,34 @@
 
 ---
 
+## Status: capability, not experiment
+
+This was originally scoped to make H3 testable — whether the assumption-surfacing gap
+generalises across model families. **That target no longer exists.** Re-scoring the
+original results with a blind semantic judge put the gap at 1.34x at the Proposer and
+1.07x, not statistically significant, at the Resolver — the output the protocol actually
+delivers. See `docs/findings/2026-09-12-assumption-metric-confound.md`.
+
+So this ships as a **capability**: you can run the Challenger on a different model if you
+want to. It is not validated as an improvement, and the documentation must not imply it is.
+Task 8 makes that explicit in the README rather than leaving it to inference.
+
+One thing the collapse of H3 does *not* change: the isolation requirement gets stricter,
+not looser. An experiment with a leaking Challenger produces a bad datapoint someone
+eventually notices. A shipped capability with a leaking Challenger silently degrades every
+user's run into the self-critique baseline, invisibly, forever. The probes in Task 1 are
+the product now, not the methodology.
+
 ## Why only the Challenger
 
-The spec designs per-role assignment for all four roles. This plan implements it for the Challenger alone, deliberately.
+The spec designs per-role assignment for all four roles. This plan implements it for the
+Challenger alone, deliberately.
 
 The Claude path costs nothing because the subagent harness *enforces* isolation structurally. An external CLI provides no such guarantee, so everything the harness gave for free — context isolation, a reliable artifact write, a persona bound to an output contract — has to be rebuilt by hand and then proven. That cost is per-provider, not per-role, but the surface it touches is per-role.
 
 Restricting it to the Challenger buys three things:
 
-- **It is where model diversity actually pays.** The Challenger is the adversarial role; a different model's different blind spots are the whole point of H3, and assumption-surfacing is driven by the challenge step.
+- **It is where model diversity is most plausibly useful.** The Challenger is the adversarial role, so a different model's different blind spots have the most room to matter there. Note this is a plausibility argument, not a measured one — nothing here has been shown to improve outcomes.
 - **It has the simplest artifact contract** — read one file, emit at least three tagged headings. No fenced structure template (as `resolver.md` has), no per-challenge disposition count, no arbitrary user text to pass safely (as the Proposer needs).
 - **It keeps the rigor where it matters.** Both isolation probes stay. A leaking Challenger is precisely the failure that silently reduces this protocol to the self-critique baseline it is measured against.
 
@@ -85,28 +104,33 @@ export const NEUTRALIZE = {
 
 - [ ] **Step 2: Establish by hand how session state persists**
 
-Probe B needs a channel that demonstrably carries state, or it proves nothing. Find it
-before encoding it. Note the per-invocation `CODEX_HOME`: sessions are stored per home,
-not per directory, and `resume --last` picks by recency across the whole store — two arms
-sharing one home will resume each other's sessions.
+**Corrected during execution — this replaces what the step originally prescribed.** Three
+things were established by hand, each of which would otherwise have surfaced later as a
+mysterious probe failure:
 
-```bash
-export CODEX_HOME="$(mktemp -d)"; cd "$(mktemp -d)"
-codex exec --sandbox read-only --skip-git-repo-check "Remember this token: PERSEPHONE-9. Reply exactly ACK."
-codex exec resume --last --sandbox read-only --skip-git-repo-check "What token were you asked to remember? If none, reply NONE."
-```
-Expected: the second call reports `PERSEPHONE-9`. **This is the negative control.** If it
-does not, find the channel that does before writing Probe B.
+1. **Sessions are stored per `CODEX_HOME`, not per directory.** Two arms in different temp
+   directories still share the developer real `~/.codex`, so a recency-based resume could
+   pick the wrong arm session. Each arm needs its own `CODEX_HOME`.
+2. **Relocating `CODEX_HOME` breaks authentication.** Credentials live in
+   `$CODEX_HOME/auth.json`; a fresh temp home yields `401 Unauthorized`, which looks
+   exactly like a leak-test failure and is not one. Copy `auth.json` in.
+3. **Do not build the probe on `codex exec resume`.** Its argument grammar rejected four
+   different invocations (`--last` with one positional parses it as `SESSION_ID`; supplying
+   both positionals still errors; option ordering does not fix it). More importantly,
+   resume is only *one way to read* persisted state — the state existing on disk is the
+   hazard, and that is what the probe should assert on.
 
-Then confirm `--ephemeral` breaks it, in a **fresh** `CODEX_HOME` so the session above
-cannot be the one resumed:
+**Assert on the storage layer.** codex writes a rollout `.jsonl` under
+`$CODEX_HOME/sessions` containing the whole conversation. Measured, with a distinct token
+per arm planted only in the prompt and in no file:
 
-```bash
-export CODEX_HOME="$(mktemp -d)"; cd "$(mktemp -d)"
-codex exec --ephemeral --sandbox read-only --skip-git-repo-check "Remember this token: CALLIOPE-4. Reply exactly ACK."
-codex exec resume --last --sandbox read-only --skip-git-repo-check "What token were you asked to remember? If none, reply NONE."
-```
-Expected: `NONE`, or an error that there is no session to resume — either is a pass.
+| | session files | token found on disk |
+|---|---|---|
+| control (no `--ephemeral`) | 1 | **yes** |
+| neutralized (`--ephemeral`) | 0 | **no** |
+
+Both arms behave as required, so the probe can actually fail — which is the only reason it
+is worth running.
 
 - [ ] **Step 3: Write both probes**
 
