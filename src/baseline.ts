@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { BASELINE_PROMPT, BASELINE_MATCHED_PROMPT } from "./prompts.js";
-import { MODEL } from "./model.js";
+import { MODEL, textOf } from "./model.js";
 
 
 export interface BaselineResult {
@@ -50,9 +50,7 @@ export async function runBaseline(task: string, matched = false): Promise<Baseli
     messages: [{ role: "user", content: task }],
   });
 
-  const block = response.content[0];
-  if (block.type !== "text") throw new Error("Unexpected response type");
-  const output = block.text;
+  const output = textOf(response);
 
   return {
     output,

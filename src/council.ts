@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { BASELINE_PROMPT } from "./prompts.js";
-import { MODEL } from "./model.js";
+import { MODEL, textOf } from "./model.js";
 
 
 export interface CouncilResult {
@@ -39,10 +39,9 @@ export async function runCouncil(task: string): Promise<CouncilResult> {
         system: BASELINE_PROMPT,
         messages: [{ role: "user", content: task }],
       });
-      const block = response.content[0];
-      if (block.type !== "text") throw new Error("Unexpected response type");
+      const text = textOf(response);
       console.log(`    Pass ${i} complete`);
-      return block.text;
+      return text;
     })
   );
 

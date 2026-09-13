@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { PROPOSER_PROMPT, CHALLENGER_PROMPT, RESOLVER_PROMPT } from "./prompts.js";
-import { MODEL } from "./model.js";
+import { MODEL, textOf } from "./model.js";
 
 
 export interface JugalbandiResult {
@@ -44,9 +44,7 @@ async function call(client: Anthropic, system: string, user: string): Promise<st
     system,
     messages: [{ role: "user", content: user }],
   });
-  const block = response.content[0];
-  if (block.type !== "text") throw new Error("Unexpected response type");
-  return block.text;
+  return textOf(response);
 }
 
 export async function runJugalbandi(task: string): Promise<JugalbandiResult> {

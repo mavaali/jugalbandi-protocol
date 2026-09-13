@@ -10,3 +10,28 @@
 //
 // Override with JUGALBANDI_MODEL to re-run a comparison on a different model.
 export const MODEL = process.env.JUGALBANDI_MODEL ?? "claude-sonnet-5";
+
+/**
+ * Pull the text out of a response.
+ *
+ * The original code read `response.content[0]` and threw if it was not a text block. That
+ * held for claude-sonnet-4, which returned a single text block. Newer models can emit
+ * other block types (e.g. thinking) first, and intermittently do — the same prompt
+ * succeeded on one call and threw on the next. Concatenating every text block is correct
+ * for both shapes.
+ *
+ * Whatever reasoning blocks the model emits apply to all arms equally, so the within-run
+ * comparison stays controlled; they are simply not part of the measured artifact.
+ */
+export function textOf(response: { content: Array<{ type: string; text?: string }> }): string {
+  const text = response.content
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("");
+  if (!text) {
+    throw new Error(
+      `no text block in response (got: ${response.content.map((b) => b.type).join(", ") || "nothing"})`,
+    );
+  }
+  return text;
+}
